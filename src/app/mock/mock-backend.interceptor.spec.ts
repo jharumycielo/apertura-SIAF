@@ -69,29 +69,62 @@ describe('mockBackendInterceptor', () => {
     expect(error?.error.message).toContain('DNI o contraseña incorrectos');
   }));
 
-  it('entrega los perfiles del usuario y cambia al que se elige', fakeAsync(() => {
-    const { valor } = esperar(http.post<LoginResponse>(`${API}/auth/login`, { dni: '33333333', password: CONTRASENA_DEMO }));
-    expect(valor?.perfilesDisponibles.map((p) => p.rolCodigo)).toEqual(['CREADOR', 'APROBADOR']);
+  it('cada usuario entra con un perfil de su ámbito: DGCP, Pliego o UE', fakeAsync(() => {
+    const esperado: [string, string, 'DGCP' | 'PLIEGO' | 'UE'][] = [
+      ['11111111', 'CREADOR', 'DGCP'],
+      ['22222222', 'APROBADOR', 'DGCP'],
+      ['44444444', 'CREADOR', 'PLIEGO'],
+      ['33333333', 'APROBADOR', 'PLIEGO'],
+      ['55555555', 'CREADOR', 'UE'],
+    ];
 
-    const headers = new HttpHeaders({ Authorization: `Bearer ${valor!.accessToken}` });
-    const cambio = esperar(http.patch<{ perfilActivo: { rolCodigo: string } }>(`${API}/auth/cambiar-perfil`, { perfilId: 'perfil-carla-aprobador' }, { headers }));
+    for (const [dni, rol, ambito] of esperado) {
+      const { valor } = esperar(http.post<LoginResponse>(`${API}/auth/login`, { dni, password: CONTRASENA_DEMO }));
+      expect(valor?.perfilesDisponibles.length).withContext(dni).toBe(1);
+      expect(valor?.perfilActivo.rolCodigo).withContext(dni).toBe(rol);
+      expect(valor?.perfilActivo.nivelAmbito).withContext(dni).toBe(ambito);
+    }
+  }));
 
-    expect(cambio.valor?.perfilActivo.rolCodigo).toBe('APROBADOR');
+  it('cada entidad ve solo sus solicitudes: la UE comparte las del Pliego y la DGCP no las ve', fakeAsync(() => {
+    const bandeja = (dni: string) =>
+      esperar(http.get<SolicitudResponse[]>(`${API}/solicitudes/bandeja-creador?tipos=SRCB`, { headers: entrar(dni) })).valor!;
+
+    expect(bandeja('11111111').length).toBe(4);
+    expect(bandeja('44444444').length).toBe(8);
+    expect(bandeja('55555555').map((s) => s.id).sort()).toEqual(bandeja('44444444').map((s) => s.id).sort());
+    expect(bandeja('11111111').every((s) => s.entidadCreadora?.siglas === 'MEF')).toBeTrue();
+  }));
+
+  it('una solicitud de la UE la aprueba el aprobador del Pliego y no el de la DGCP', fakeAsync(() => {
+    const rosa = entrar('55555555');
+    const creada = esperar(http.post<SolicitudResponse>(`${API}/solicitudes`, { tipoAccion: 'creacion', organoLinea: 'OA', justificacion: 'Cuenta de la UE' }, { headers: rosa }));
+    const id = creada.valor!.id;
+    esperar(http.post(`${API}/solicitudes/${id}/cuenta-bancaria`, CUENTA, { headers: rosa }));
+    esperar(http.post(`${API}/solicitudes/${id}/sustentos`, archivo(), { headers: rosa }));
+    const elaborada = esperar(http.patch<{ numero: string }>(`${API}/solicitudes/${id}/estado`, { estadoNuevo: 'ELABORADO' }, { headers: rosa }));
+    expect(elaborada.valor?.numero).toMatch(/^PCB-SRCB-00013-\d{4}-MINSA-OA$/);
+    esperar(http.patch(`${API}/solicitudes/${id}/estado`, { estadoNuevo: 'VERIFICADO' }, { headers: rosa }));
+
+    const avisos = (dni: string) =>
+      esperar(http.get<{ documento: { id: string } }[]>(`${API}/notificaciones`, { headers: entrar(dni) })).valor!;
+    expect(avisos('33333333').some((n) => n.documento.id === id)).toBeTrue();
+    expect(avisos('22222222').some((n) => n.documento.id === id)).toBeFalse();
   }));
 
   it('la bandeja no muestra solicitudes en NUEVO y pagina si se pide', fakeAsync(() => {
     const headers = entrar('11111111');
-    esperar(http.post(`${API}/solicitudes`, { tipoAccion: 'creacion', organoLinea: 'OGA', justificacion: 'Borrador' }, { headers }));
+    esperar(http.post(`${API}/solicitudes`, { tipoAccion: 'creacion', organoLinea: 'DGCP', justificacion: 'Borrador' }, { headers }));
 
-    const { valor } = esperar(http.get<{ data: SolicitudResponse[]; total: number }>(`${API}/solicitudes/bandeja-creador?tipos=SRCB&page=1&limit=5`, { headers }));
+    const { valor } = esperar(http.get<{ data: SolicitudResponse[]; total: number }>(`${API}/solicitudes/bandeja-creador?tipos=SRCB&page=1&limit=3`, { headers }));
 
-    expect(valor?.data.length).toBe(5);
-    expect(valor?.total).toBe(12);
+    expect(valor?.data.length).toBe(3);
+    expect(valor?.total).toBe(4);
   }));
 
   it('recorre el flujo completo: elaborar, verificar y aprobar crea la cuenta y avisa a cada rol', fakeAsync(() => {
     const ana = entrar('11111111');
-    const creada = esperar(http.post<SolicitudResponse>(`${API}/solicitudes`, { tipoAccion: 'creacion', organoLinea: 'OGA', justificacion: 'Cuenta nueva' }, { headers: ana }));
+    const creada = esperar(http.post<SolicitudResponse>(`${API}/solicitudes`, { tipoAccion: 'creacion', organoLinea: 'DGCP', justificacion: 'Cuenta nueva' }, { headers: ana }));
     const id = creada.valor!.id;
 
     // Sin datos ni sustento no se puede elaborar.
@@ -100,7 +133,7 @@ describe('mockBackendInterceptor', () => {
     esperar(http.post(`${API}/solicitudes/${id}/cuenta-bancaria`, CUENTA, { headers: ana }));
     esperar(http.post(`${API}/solicitudes/${id}/sustentos`, archivo(), { headers: ana }));
     const elaborada = esperar(http.patch<{ numero: string }>(`${API}/solicitudes/${id}/estado`, { estadoNuevo: 'ELABORADO' }, { headers: ana }));
-    expect(elaborada.valor?.numero).toMatch(/^PCB-SRCB-00013-\d{4}-MEF-OGA$/);
+    expect(elaborada.valor?.numero).toMatch(/^PCB-SRCB-00013-\d{4}-MEF-DGCP$/);
 
     // El creador no puede aprobar.
     expect(esperar(http.patch(`${API}/solicitudes/${id}/estado`, { estadoNuevo: 'APROBADO' }, { headers: ana })).error?.status).toBe(409);

@@ -27,9 +27,13 @@ contraseña con un clic.
 
 | Usuario | DNI | Perfil | Qué puede hacer |
 | --- | --- | --- | --- |
-| Ana Torres Díaz | `11111111` | Creador | Crear, grabar, editar, verificar y eliminar solicitudes |
-| Luis Ramírez Soto | `22222222` | Aprobador | Aprobar, observar (con comentario) o rechazar lo verificado |
-| Carla Mendoza Ríos | `33333333` | Creador y Aprobador | Lo mismo que los dos anteriores: cambia de perfil desde su menú de usuario |
+| Ana Torres Díaz | `11111111` | Creador · DGCP | Crear, grabar, editar, verificar y eliminar solicitudes |
+| Luis Ramírez Soto | `22222222` | Aprobador · DGCP | Aprobar, observar (con comentario) o rechazar lo verificado |
+| Marco Quispe Huamán | `44444444` | Creador · Pliego | Igual que Ana, en el Pliego (Ministerio de Salud) |
+| Carla Mendoza Ríos | `33333333` | Aprobador · Pliego | Igual que Luis, en el Pliego; también aprueba lo que crea la UE |
+| Rosa Flores Vega | `55555555` | Creador · UE | Igual que Ana, en la unidad ejecutora (Hospital Nacional Dos de Mayo) |
+
+Cada entidad ve solo sus solicitudes: la DGCP (MEF) tiene las suyas; el Pliego y su UE (MINSA) comparten las suyas.
 
 «Olvidé mi contraseña» también funciona: con el correo de un usuario (por ejemplo `ana.torres@taller.pe`) el código de
 verificación es `123456`.
@@ -40,13 +44,13 @@ verificación es `123456`.
 2. **Procesos → Gestión de tesorería → Registro de cuentas bancarias → Documentos y registros**. La pestaña Documentos
    es la bandeja; Registros, las cuentas ya aprobadas (con el historial de la solicitud que las creó).
 3. **Crear documento → Solicitud de Registro de Cuenta Bancaria**: llenar el formulario, adjuntar un PDF de sustento
-   y **Grabar**. La solicitud recibe su número (`PCB-SRCB-00013-2026-MEF-OGA`) y queda Elaborada; luego **Verificar**.
+   y **Grabar**. La solicitud recibe su número (`PCB-SRCB-00013-2026-MEF-DGCP`) y queda Elaborada; luego **Verificar**.
 4. **Cerrar sesión** y entrar como Luis: tiene la notificación «Solicitud por aprobar». Abrir la solicitud y
    **Aprobar** (la cuenta aparece en Registros con el código `CB-0009`), **Observar** o **Rechazar** (piden comentario).
 5. Volver a entrar como Ana: le llega el aviso. Una solicitud observada se corrige y se vuelve a verificar, pero ya no
    se puede eliminar.
-6. Entrar como Carla y cambiar de perfil desde el menú del usuario: el avatar pasa de «CR» a «AP» y cambian la bandeja,
-   los botones y las notificaciones.
+6. Entrar como Rosa (UE), crear y verificar una solicitud; luego entrar como Carla (aprobador del Pliego) y aprobarla.
+   Luis (aprobador de la DGCP) no la ve: cada entidad tiene su propia bandeja.
 7. **Consultas y reportes**: elegir el rango de fechas de apertura y consultar. Probar los filtros, la **vista de
    gráficas** (KPI, barras, dona y línea) y **Exportar** a Excel, CSV o PDF.
 8. **Catálogo de componentes** en `/ui-kit` (enlace «Ver componentes» del login): cada componente con su ficha, sus

@@ -9,10 +9,9 @@ import type { EstadoDocumento } from '../core/models/documento.model';
 import type { CuentaBancariaDatos } from '../modules/tesoreria/cuentas-bancarias/models/cuenta-bancaria.model';
 import {
   DatosTaller,
-  ENTIDAD_CREADORA,
+  contextoDePerfil,
   NotificacionMock,
   TIPO_DOCUMENTO,
-  UNIDAD_CREADORA,
   filaHistorial,
   guardarDatos,
   leerDatos,
@@ -146,7 +145,9 @@ const tiposDocumento: Manejador = () => ok([
 
 function visibles(datos: DatosTaller, sesion: Sesion): NotificacionMock[] {
   return datos.notificaciones
-    .filter((n) => (n.paraUsuarioId ? n.paraUsuarioId === sesion.usuario.id : n.paraRolCodigo === sesion.perfil.rolCodigo))
+    .filter((n) => (n.paraUsuarioId
+      ? n.paraUsuarioId === sesion.usuario.id
+      : n.paraRolCodigo === sesion.perfil.rolCodigo && (!n.paraEntidadId || n.paraEntidadId === sesion.perfil.entidadId)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -181,7 +182,7 @@ function notificar(datos: DatosTaller, s: SolicitudResponse, estado: EstadoDocum
   };
   const texto = textos[estado];
   if (!texto) return;
-  const destino = estado === 'VERIFICADO' ? { paraRolCodigo: 'APROBADOR' as const } : { paraUsuarioId: s.creador?.id };
+  const destino = estado === 'VERIFICADO' ? { paraRolCodigo: 'APROBADOR' as const, paraEntidadId: s.entidadCreadora?.id } : { paraUsuarioId: s.creador?.id };
   datos.notificaciones.push({
     id: nuevoId(datos, 'not'),
     tipo: `DOCUMENTO_${estado}`,
@@ -246,8 +247,7 @@ const crearSolicitud: Manejador = ({ req, datos, sesion }) => {
     tipoAccion: dto.tipoAccion ?? 'creacion',
     estado: 'NUEVO',
     asuntoMotivo: `[${dto.organoLinea ?? ''}] ${dto.justificacion ?? ''}`,
-    entidadCreadora: ENTIDAD_CREADORA,
-    unidadCreadora: UNIDAD_CREADORA,
+    ...contextoDePerfil(sesion.perfil),
     creador: { id: sesion.usuario.id, nombres: sesion.usuario.nombres, apellidoPaterno: sesion.usuario.apellidoPaterno, apellidoMaterno: sesion.usuario.apellidoMaterno },
     fechaRegistro: ahora,
     createdAt: ahora,
@@ -358,7 +358,7 @@ const cambiarEstado: Manejador = ({ req, datos, params, sesion }) => {
   const anterior = s.estado;
   if (nuevo === 'ELABORADO' && !s.numero) {
     datos.correlativoDocumento += 1;
-    s.numero = numeroDocumento(datos.correlativoDocumento, new Date());
+    s.numero = numeroDocumento(datos.correlativoDocumento, new Date(), s.entidadCreadora?.siglas ?? '', s.unidadCreadora?.sigla ?? '');
   }
   // Volver a grabar un ELABORADO no deja fila en el historial.
   if (!(anterior === 'ELABORADO' && nuevo === 'ELABORADO')) {

@@ -1,3 +1,4 @@
+import type { PerfilItem } from '../core/api/auth-api.service';
 import type { NotificacionResponse } from '../core/api/notificaciones-api.service';
 import type { HistorialItem, SolicitudResponse } from '../core/api/solicitudes-api.service';
 import type { EstadoDocumento } from '../core/models/documento.model';
@@ -15,12 +16,14 @@ import { USUARIOS_DEMO, UsuarioDemo } from './usuarios-demo';
  */
 
 const CLAVE = 'taller-siaf-rp:datos';
-const VERSION = 1;
+const VERSION = 2;
 
 export interface NotificacionMock extends NotificacionResponse {
   /** Destinatario: un usuario puntual o, si no hay, todos los perfiles con este rol. */
   paraUsuarioId?: string;
   paraRolCodigo?: 'CREADOR' | 'APROBADOR';
+  /** Con rol destinatario, solo los perfiles de esta entidad lo ven. */
+  paraEntidadId?: string | null;
 }
 
 export interface DatosTaller {
@@ -34,8 +37,14 @@ export interface DatosTaller {
 }
 
 export const TIPO_DOCUMENTO = { id: 'td-srcb', codigo: CODIGO_DOCUMENTO, nombre: NOMBRE_DOCUMENTO };
-export const ENTIDAD_CREADORA = { id: 'ent-mef', codMef: '0001', siglas: 'MEF', nombre: 'Ministerio de Economía y Finanzas' };
-export const UNIDAD_CREADORA = { id: 'uo-oga', sigla: 'OGA', nombre: 'Oficina General de Administración' };
+
+/** Entidad y unidad con que se registra una solicitud: las del perfil que la crea. */
+export function contextoDePerfil(p: PerfilItem) {
+  return {
+    entidadCreadora: { id: p.entidadId ?? '', codMef: p.entidadCodigo ?? '', siglas: p.entidadSiglas ?? '', nombre: p.entidad ?? '' },
+    unidadCreadora: { id: p.unidadId ?? '', sigla: p.unidadSigla ?? '', nombre: p.unidad ?? '' },
+  };
+}
 
 export function leerDatos(): DatosTaller {
   try {
@@ -70,8 +79,8 @@ export function nuevoId(datos: DatosTaller, prefijo: string): string {
   return `${prefijo}-${datos.secuencia}`;
 }
 
-export function numeroDocumento(correlativo: number, fecha: Date): string {
-  return `PCB-SRCB-${String(correlativo).padStart(5, '0')}-${fecha.getFullYear()}-MEF-OGA`;
+export function numeroDocumento(correlativo: number, fecha: Date, entidadSiglas: string, unidadSigla: string): string {
+  return `PCB-SRCB-${String(correlativo).padStart(5, '0')}-${fecha.getFullYear()}-${entidadSiglas}-${unidadSigla}`;
 }
 
 export function filaHistorial(
@@ -153,14 +162,21 @@ function crearDatosIniciales(): DatosTaller {
     correlativoRegistro: 0,
     secuencia: 0,
   };
-  const ana = USUARIOS_DEMO[0];
-  const luis = USUARIOS_DEMO[1];
+  const porId = (id: string) => USUARIOS_DEMO.find((u) => u.id === id)!;
+  // Las semillas se reparten entre los tres ámbitos (DGCP, Pliego y UE) para que cada usuario tenga datos propios.
+  const AMBITOS = [
+    { crea: porId('usr-ana'), aprueba: porId('usr-luis') },
+    { crea: porId('usr-marco'), aprueba: porId('usr-carla') },
+    { crea: porId('usr-rosa'), aprueba: porId('usr-carla') },
+  ];
 
-  for (const semilla of SEMILLAS) {
+  SEMILLAS.forEach((semilla, indice) => {
+    const { crea: ana, aprueba: luis } = AMBITOS[indice % AMBITOS.length];
+    const contexto = contextoDePerfil(ana.perfiles[0]);
     const id = nuevoId(datos, 'sol');
     datos.correlativoDocumento += 1;
     const creada = enFecha(semilla.creada, 9);
-    const numero = numeroDocumento(datos.correlativoDocumento, new Date(creada));
+    const numero = numeroDocumento(datos.correlativoDocumento, new Date(creada), contexto.entidadCreadora.siglas, contexto.unidadCreadora.sigla);
     const historial: HistorialItem[] = [
       filaHistorial(datos, null, 'NUEVO', creada, ana, ROL_CREADOR),
       filaHistorial(datos, 'NUEVO', 'ELABORADO', enFecha(semilla.creada, 9, 0), ana, ROL_CREADOR),
@@ -179,9 +195,8 @@ function crearDatosIniciales(): DatosTaller {
       catDocumento: TIPO_DOCUMENTO,
       tipoAccion: 'creacion',
       estado: semilla.estado,
-      asuntoMotivo: `[OFICINA GENERAL DE ADMINISTRACIÓN] ${semilla.justificacion}`,
-      entidadCreadora: ENTIDAD_CREADORA,
-      unidadCreadora: UNIDAD_CREADORA,
+      asuntoMotivo: `[${contexto.unidadCreadora.nombre.toUpperCase()}] ${semilla.justificacion}`,
+      ...contexto,
       creador: { id: ana.id, nombres: ana.nombres, apellidoPaterno: ana.apellidoPaterno, apellidoMaterno: ana.apellidoMaterno },
       fechaRegistro: creada,
       createdAt: creada,
@@ -205,17 +220,17 @@ function crearDatosIniciales(): DatosTaller {
         id: nuevoId(datos, 'cb'),
         codigo: `CB-${String(datos.correlativoRegistro).padStart(4, '0')}`,
         estado: semilla.registroInactivo ? 'Inactivo' : 'Activo',
-        entidadSiglas: 'MEF',
+        entidadSiglas: contexto.entidadCreadora.siglas,
         documentoId: id,
         numeroDocumento: numero,
         fechaRegistro: ultima,
         ...semilla.datos,
       });
     }
-  }
+  });
 
   // Notificaciones: el aprobador tiene una solicitud por aprobar; el creador, una observada y otras ya leídas.
-  const aviso = (s: SolicitudResponse, tipo: string, titulo: string, mensaje: string, leida: boolean, destino: Pick<NotificacionMock, 'paraUsuarioId' | 'paraRolCodigo'>): NotificacionMock => ({
+  const aviso = (s: SolicitudResponse, tipo: string, titulo: string, mensaje: string, leida: boolean, destino: Pick<NotificacionMock, 'paraUsuarioId' | 'paraRolCodigo' | 'paraEntidadId'>): NotificacionMock => ({
     id: nuevoId(datos, 'not'),
     tipo,
     titulo,
@@ -228,17 +243,19 @@ function crearDatosIniciales(): DatosTaller {
   });
   const porEstado = (estado: string) => datos.solicitudes.filter((s) => s.estado === estado);
   for (const s of porEstado('VERIFICADO')) {
-    datos.notificaciones.push(aviso(s, 'DOCUMENTO_VERIFICADO', 'Solicitud por aprobar', `La solicitud ${s.numero} fue verificada y espera su aprobación.`, false, { paraRolCodigo: 'APROBADOR' }));
+    datos.notificaciones.push(aviso(s, 'DOCUMENTO_VERIFICADO', 'Solicitud por aprobar', `La solicitud ${s.numero} fue verificada y espera su aprobación.`, false, { paraRolCodigo: 'APROBADOR', paraEntidadId: s.entidadCreadora?.id }));
   }
   for (const s of porEstado('OBSERVADO')) {
-    datos.notificaciones.push(aviso(s, 'DOCUMENTO_OBSERVADO', 'Solicitud observada', `La solicitud ${s.numero} fue observada: revise el comentario y subsane.`, false, { paraUsuarioId: ana.id }));
+    datos.notificaciones.push(aviso(s, 'DOCUMENTO_OBSERVADO', 'Solicitud observada', `La solicitud ${s.numero} fue observada: revise el comentario y subsane.`, false, { paraUsuarioId: s.creador?.id }));
   }
   for (const s of porEstado('RECHAZADO')) {
-    datos.notificaciones.push(aviso(s, 'DOCUMENTO_RECHAZADO', 'Solicitud rechazada', `La solicitud ${s.numero} fue rechazada.`, true, { paraUsuarioId: ana.id }));
+    datos.notificaciones.push(aviso(s, 'DOCUMENTO_RECHAZADO', 'Solicitud rechazada', `La solicitud ${s.numero} fue rechazada.`, true, { paraUsuarioId: s.creador?.id }));
   }
-  const ultimaAprobada = porEstado('APROBADO').at(-1);
-  if (ultimaAprobada) {
-    datos.notificaciones.push(aviso(ultimaAprobada, 'DOCUMENTO_APROBADO', 'Solicitud aprobada', `La solicitud ${ultimaAprobada.numero} fue aprobada.`, true, { paraUsuarioId: ana.id }));
+  for (const { crea } of AMBITOS) {
+    const ultimaAprobada = porEstado('APROBADO').filter((s) => s.creador?.id === crea.id).at(-1);
+    if (ultimaAprobada) {
+      datos.notificaciones.push(aviso(ultimaAprobada, 'DOCUMENTO_APROBADO', 'Solicitud aprobada', `La solicitud ${ultimaAprobada.numero} fue aprobada.`, true, { paraUsuarioId: crea.id }));
+    }
   }
 
   return datos;

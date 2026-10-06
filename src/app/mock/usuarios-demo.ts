@@ -3,9 +3,11 @@ import type { PerfilItem } from '../core/api/auth-api.service';
 /**
  * Usuarios de demostración del taller. Entran con su DNI y la contraseña común.
  *
- * - Ana (creador) registra y verifica solicitudes.
- * - Luis (aprobador) aprueba, observa o rechaza lo verificado.
- * - Carla tiene los dos perfiles: sirve para mostrar el cambio de perfil desde el menú del usuario.
+ * Cada ámbito es una entidad distinta y cada usuario solo ve lo de su entidad:
+ * - DGCP: Ana (creador) y Luis (aprobador).
+ * - Pliego: Marco (creador) y Carla (aprobador).
+ * - UE (unidad ejecutora del Pliego): Rosa (creador). Comparte entidad con el Pliego, así que su solicitud la
+ *   aprueba Carla.
  *
  * Son datos de ejemplo: no hay contraseñas reales ni se validan contra un servidor.
  */
@@ -23,7 +25,24 @@ export interface UsuarioDemo {
   perfiles: PerfilItem[];
 }
 
-const ENTIDAD = {
+/** Dónde trabaja un usuario: de aquí salen la entidad y la unidad de las solicitudes que crea. */
+export interface AmbitoDemo {
+  entidad: string;
+  entidadId: string;
+  entidadCodigo: string;
+  entidadSiglas: string;
+  ue: string | null;
+  ueId: string | null;
+  ueSiglas: string | null;
+  unidad: string;
+  unidadSigla: string;
+  unidadId: string;
+  nivelAmbito: 'DGCP' | 'PLIEGO' | 'UE';
+  entidadAmbitoId: string;
+  entidadAmbitoCodigo: string;
+}
+
+export const AMBITO_DGCP: AmbitoDemo = {
   entidad: 'Ministerio de Economía y Finanzas',
   entidadId: 'ent-mef',
   entidadCodigo: '0001',
@@ -31,19 +50,57 @@ const ENTIDAD = {
   ue: null,
   ueId: null,
   ueSiglas: null,
-  unidad: 'Oficina General de Administración',
-  unidadSigla: 'OGA',
-  unidadId: 'uo-oga',
-  procedimiento: 'Registro de cuentas bancarias',
-  procedimientoCodigo: 'RCB',
-  nivelAmbito: 'PLIEGO' as const,
-  entidadAmbitoId: 'amb-gn',
-  entidadAmbitoCodigo: 'GN',
+  unidad: 'Dirección General de Contabilidad Pública',
+  unidadSigla: 'DGCP',
+  unidadId: 'uo-dgcp',
+  nivelAmbito: 'DGCP',
+  entidadAmbitoId: 'amb-dgcp',
+  entidadAmbitoCodigo: 'DGCP',
 };
 
-function perfil(id: string, rolCodigo: 'CREADOR' | 'APROBADOR', rol: string, perfilFuncional: string): PerfilItem {
-  return { id, ...ENTIDAD, rol, rolCodigo, perfilFuncional };
+export const AMBITO_PLIEGO: AmbitoDemo = {
+  entidad: 'Ministerio de Salud',
+  entidadId: 'ent-minsa',
+  entidadCodigo: '011',
+  entidadSiglas: 'MINSA',
+  ue: null,
+  ueId: null,
+  ueSiglas: null,
+  unidad: 'Oficina General de Administración',
+  unidadSigla: 'OGA',
+  unidadId: 'uo-minsa-oga',
+  nivelAmbito: 'PLIEGO',
+  entidadAmbitoId: 'amb-pliego',
+  entidadAmbitoCodigo: 'PLIEGO',
+};
+
+export const AMBITO_UE: AmbitoDemo = {
+  ...AMBITO_PLIEGO,
+  ue: 'Hospital Nacional Dos de Mayo',
+  ueId: 'ue-hndm',
+  ueSiglas: 'HNDM',
+  unidad: 'Oficina de Administración',
+  unidadSigla: 'OA',
+  unidadId: 'uo-hndm-oa',
+  nivelAmbito: 'UE',
+  entidadAmbitoId: 'amb-ue',
+  entidadAmbitoCodigo: 'UE',
+};
+
+function perfil(id: string, ambito: AmbitoDemo, rolCodigo: 'CREADOR' | 'APROBADOR', rol: string, perfilFuncional: string): PerfilItem {
+  return {
+    id,
+    ...ambito,
+    procedimiento: 'Registro de cuentas bancarias',
+    procedimientoCodigo: 'RCB',
+    rol,
+    rolCodigo,
+    perfilFuncional,
+  };
 }
+
+const creador = (id: string, ambito: AmbitoDemo) => perfil(id, ambito, 'CREADOR', 'Creador', 'Operador de cuentas bancarias');
+const aprobador = (id: string, ambito: AmbitoDemo) => perfil(id, ambito, 'APROBADOR', 'Aprobador', 'Aprobador de cuentas bancarias');
 
 export const USUARIOS_DEMO: UsuarioDemo[] = [
   {
@@ -53,8 +110,8 @@ export const USUARIOS_DEMO: UsuarioDemo[] = [
     nombres: 'Ana',
     apellidoPaterno: 'Torres',
     apellidoMaterno: 'Díaz',
-    descripcion: 'Creador: registra y verifica solicitudes',
-    perfiles: [perfil('perfil-ana-creador', 'CREADOR', 'Creador', 'Operador de cuentas bancarias')],
+    descripcion: 'Creador · DGCP: registra y verifica solicitudes',
+    perfiles: [creador('perfil-ana-creador', AMBITO_DGCP)],
   },
   {
     id: 'usr-luis',
@@ -63,8 +120,18 @@ export const USUARIOS_DEMO: UsuarioDemo[] = [
     nombres: 'Luis',
     apellidoPaterno: 'Ramírez',
     apellidoMaterno: 'Soto',
-    descripcion: 'Aprobador: aprueba, observa o rechaza',
-    perfiles: [perfil('perfil-luis-aprobador', 'APROBADOR', 'Aprobador', 'Aprobador de cuentas bancarias')],
+    descripcion: 'Aprobador · DGCP: aprueba, observa o rechaza',
+    perfiles: [aprobador('perfil-luis-aprobador', AMBITO_DGCP)],
+  },
+  {
+    id: 'usr-marco',
+    dni: '44444444',
+    email: 'marco.quispe@taller.pe',
+    nombres: 'Marco',
+    apellidoPaterno: 'Quispe',
+    apellidoMaterno: 'Huamán',
+    descripcion: 'Creador · Pliego: registra y verifica solicitudes',
+    perfiles: [creador('perfil-marco-creador', AMBITO_PLIEGO)],
   },
   {
     id: 'usr-carla',
@@ -73,11 +140,18 @@ export const USUARIOS_DEMO: UsuarioDemo[] = [
     nombres: 'Carla',
     apellidoPaterno: 'Mendoza',
     apellidoMaterno: 'Ríos',
-    descripcion: 'Dos perfiles: creador y aprobador (cambia de perfil)',
-    perfiles: [
-      perfil('perfil-carla-creador', 'CREADOR', 'Creador', 'Operador de cuentas bancarias'),
-      perfil('perfil-carla-aprobador', 'APROBADOR', 'Aprobador', 'Aprobador de cuentas bancarias'),
-    ],
+    descripcion: 'Aprobador · Pliego: aprueba, observa o rechaza (Pliego y UE)',
+    perfiles: [aprobador('perfil-carla-aprobador', AMBITO_PLIEGO)],
+  },
+  {
+    id: 'usr-rosa',
+    dni: '55555555',
+    email: 'rosa.flores@taller.pe',
+    nombres: 'Rosa',
+    apellidoPaterno: 'Flores',
+    apellidoMaterno: 'Vega',
+    descripcion: 'Creador · UE: registra y verifica solicitudes',
+    perfiles: [creador('perfil-rosa-creador', AMBITO_UE)],
   },
 ];
 
