@@ -32,7 +32,7 @@ import { PaginationComponent } from '../pagination/pagination.component';
  * @accesibilidad
  * - **4.1.2 Nombre, función y valor (A)**: checkbox nativo con `aria-label` (`selectAllLabel`, «Seleccionar filas» por
  *   defecto) y estado mixto con `indeterminate`; las acciones son `<button>` con `aria-label` (`editLabel`,
- *   `deleteLabel`, `exportLabel` y `menuLabel`, este «Mas opciones» sin tilde) y `editDisabled` usa `disabled`.
+ *   `deleteLabel`, `exportLabel` y `menuLabel`, este «Mas opciones» sin tilde) y `editDisabled` / `deleteDisabled` usan `disabled`.
  * - **Pendiente · 4.1.3 Mensajes de estado (AA)**: el contador de la paginación superior no se anuncia al cambiar de
  *   página o filtrar (lo hereda de `siaf-pagination`), y tampoco hay aviso de cuántas filas quedan elegidas.
  * - **Pendiente · 2.4.3 Orden del foco (A)**: las acciones solo existen con filas elegidas: si una deja la selección
@@ -77,9 +77,10 @@ import { PaginationComponent } from '../pagination/pagination.component';
 
       @if (selectedCount > 0 && showDeleteAction) {
         <button
-          class="inline-flex size-10 items-center justify-center rounded-siaf-md text-text-muted transition hover:bg-surface-muted"
+          class="inline-flex size-10 items-center justify-center rounded-siaf-md text-text-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           type="button"
           [attr.aria-label]="deleteLabel"
+          [disabled]="deleteDisabled"
           (click)="delete.emit()"
         >
           <siaf-icon name="delete" [size]="24" />
@@ -130,6 +131,7 @@ export class TableControlsComponent {
   @Input() showMenuAction = false;
   @Input() showSelection = true;
   @Input() editDisabled = false;
+  @Input() deleteDisabled = false;
   @Input() hideTopPaginationOnMobile = false;
   @Input() selectAllLabel = 'Seleccionar filas';
   @Input() editLabel = 'Editar fila seleccionada';

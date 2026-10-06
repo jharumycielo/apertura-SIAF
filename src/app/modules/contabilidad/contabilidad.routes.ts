@@ -9,4 +9,18 @@ export const CONTABILIDAD_ROUTES: Routes = [
         (m) => m.AperturaContableMensualConfiguracionComponent,
       ),
   },
+  {
+    path: 'procesos/apertura-contable-mensual/configuracion/detalle/:pliegoId',
+    loadComponent: () =>
+      import('./apertura-contable-mensual/pages/detalle/apertura-contable-mensual-detalle.component').then(
+        (m) => m.AperturaContableMensualDetalleComponent,
+      ),
+  },
+  {
+    path: 'procesos/apertura-contable-mensual/configuracion/editar/:pliegoId',
+    loadComponent: () =>
+      import('./apertura-contable-mensual/pages/editar/apertura-contable-mensual-editar.component').then(
+        (m) => m.AperturaContableMensualEditarComponent,
+      ),
+  },
 ];
