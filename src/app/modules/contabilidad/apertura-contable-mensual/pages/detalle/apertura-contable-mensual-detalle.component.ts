@@ -10,13 +10,15 @@ import { UploadedFileCardComponent } from '../../../../../shared/ui/uploaded-fil
 import { buildProcessBreadcrumbs } from '../../../../../shared/utils/breadcrumbs.util';
 import { HistorialConfiguracionComponent } from '../../components/historial-configuracion.component';
 import { CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE } from '../../config/apertura-contable-mensual.rutas';
-import { generarConfiguracionDePliego, generarSituacionPorPliego, nombrePeriodo } from '../../models/apertura-contable-mensual.model';
+import { generarSituacionPorPliego, nombrePeriodo } from '../../models/apertura-contable-mensual.model';
+import { VistaAperturaService } from '../../services/vista-apertura.service';
+import { ConfiguracionPliegoService } from '../../services/configuracion-pliego.service';
 
 /**
  * Detalle de solo lectura de la apertura contable mensual de un pliego (Figma node-id 2404:121770): se llega al pulsar
  * el nombre del pliego en la pestaña «Pliegos». Muestra el pliego, el periodo, el tipo y las fechas de cierre, la
  * justificación, el documento de sustento y el historial de la configuración. El nombre del pliego sale de la ruta;
- * la configuración es de ejemplo y es la misma para todos los pliegos.
+ * muestra lo grabado en la última edición del pliego (`ConfiguracionPliegoService`) o, si nunca se editó, la configuración de ejemplo.
  */
 @Component({
   selector: 'siaf-apertura-contable-mensual-detalle',
@@ -45,7 +47,7 @@ import { generarConfiguracionDePliego, generarSituacionPorPliego, nombrePeriodo 
       <div class="flex flex-col gap-siaf-md p-siaf-md">
         <siaf-solicitude-form-card title="Apertura contable mensual">
           <section class="flex flex-col gap-siaf-sm" aria-labelledby="detalle-pliego">
-            <h3 id="detalle-pliego" class="m-0 text-sm font-bold uppercase text-text">Pliego</h3>
+            <h3 id="detalle-pliego" class="m-0 text-sm font-bold uppercase text-text">{{ vista.entidadSingular }}</h3>
             <siaf-summary-card [bordered]="true" [showClose]="false" [fields]="camposPliego()" />
           </section>
 
@@ -63,7 +65,7 @@ import { generarConfiguracionDePliego, generarSituacionPorPliego, nombrePeriodo 
               </p>
               <readonly-field caption="Fecha inicio desde" [value]="configuracion.fechaInicio" />
               <readonly-field caption="Fecha fin hasta" [value]="configuracion.fechaFin" />
-              <readonly-field [caption]="'Fecha cierre ' + configuracion.tipoCierre.toLowerCase()" [value]="configuracion.fechaCierre" />
+              <readonly-field [caption]="'Fecha cierre ' + configuracion.tipoCierre.toLowerCase()" [value]="configuracion.fechaCierre || '--'" />
             </div>
           </section>
         </siaf-solicitude-form-card>
@@ -73,7 +75,13 @@ import { generarConfiguracionDePliego, generarSituacionPorPliego, nombrePeriodo 
 
           <div class="flex flex-col gap-siaf-xs">
             <h3 class="m-0 flex min-h-10 items-center text-sm font-bold uppercase text-text">Documento de sustento</h3>
-            <siaf-uploaded-file-card [file]="configuracion.archivo" [readonly]="true" />
+            @if (configuracion.archivo) {
+              <siaf-uploaded-file-card [file]="configuracion.archivo" [readonly]="true" />
+            } @else {
+              <div class="flex min-h-[49px] items-center rounded-siaf-md bg-[var(--sys-color-bg-surfaces-surface-low)] px-siaf-md py-siaf-sm">
+                <p class="m-0 text-sm text-[var(--sys-color-text-neutral-medium)]">No se han adjuntado archivos.</p>
+              </div>
+            }
           </div>
         </siaf-solicitude-form-card>
 
@@ -90,14 +98,15 @@ export class AperturaContableMensualDetalleComponent {
   private readonly route = inject(ActivatedRoute);
 
   readonly breadcrumbs = buildProcessBreadcrumbs(CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE);
-  readonly configuracion = generarConfiguracionDePliego();
 
-  private readonly pliego = (() => {
-    const id = this.route.snapshot.paramMap.get('pliegoId') ?? '';
-    return generarSituacionPorPliego().find((p) => p.id === id)?.pliego ?? '';
-  })();
+  readonly vista = inject(VistaAperturaService).vista();
+  private readonly pliegoId = this.route.snapshot.paramMap.get('pliegoId') ?? '';
+  private readonly pliego = generarSituacionPorPliego(this.vista.entidadesLista).find((p) => p.id === this.pliegoId)?.pliego ?? '';
+  private readonly periodoElegido = this.route.snapshot.queryParamMap.get('periodo');
+  private readonly periodoDatos = generarSituacionPorPliego(this.vista.entidadesLista).find((p) => p.id === this.pliegoId)?.periodos.find((p) => p.periodo === this.periodoElegido);
+  readonly configuracion = inject(ConfiguracionPliegoService).obtener(this.periodoElegido ? `${this.pliegoId}|${this.periodoElegido}` : this.pliegoId, this.periodoDatos);
 
-  readonly camposPliego = computed<SummaryCardField[]>(() => [{ label: 'Nombre del pliego', value: this.pliego }]);
+  readonly camposPliego = computed<SummaryCardField[]>(() => [{ label: this.vista.etiquetaNombre, value: this.pliego }]);
   readonly camposPeriodo = computed<SummaryCardField[]>(() => [{ label: 'Periodo mensual', value: nombrePeriodo(this.configuracion.periodo) }]);
 
   volver(): void {

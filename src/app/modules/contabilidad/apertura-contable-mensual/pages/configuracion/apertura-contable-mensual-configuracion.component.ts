@@ -11,13 +11,16 @@ import { IconDropdownMenuComponent, IconDropdownMenuItem } from '../../../../../
 import { IconComponent } from '../../../../../shared/ui/icon/icon.component';
 import { ReportTableColumn, ReportTableComponent, ReportTableRow } from '../../../../../shared/ui/report-table/report-table.component';
 import { SnackbarComponent } from '../../../../../shared/ui/snackbar/snackbar.component';
+import { RecordStatus, RecordStatusTagComponent } from '../../../../../shared/ui/record-status-tag/record-status-tag.component';
 import { TabItem, TabsComponent } from '../../../../../shared/ui/tabs/tabs.component';
 import { buildProcessBreadcrumbs } from '../../../../../shared/utils/breadcrumbs.util';
 import { CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE, DETALLE_ROUTE, EDITAR_ROUTE } from '../../config/apertura-contable-mensual.rutas';
+import { VistaAperturaService } from '../../services/vista-apertura.service';
 import { SituacionPeriodoPliego, SituacionPliego, generarRegistrosAperturaContableMensual, generarSituacionPorPliego } from '../../models/apertura-contable-mensual.model';
 
-const COLUMNAS: ReportTableColumn[] = [
-  { key: 'pliego', label: 'Pliego', width: 200 },
+function columnasGeneral(primera: string): ReportTableColumn[] {
+  return [
+  { key: 'pliego', label: primera, width: 200 },
   { key: 'periodo', label: 'Periodo', width: 100 },
   { key: 'fechaInicio', label: 'Fecha de inicio', width: 130 },
   { key: 'fechaFin', label: 'Fecha fin', width: 120 },
@@ -26,7 +29,8 @@ const COLUMNAS: ReportTableColumn[] = [
   { key: 'cierreContable', label: 'Cierre contable', width: 140 },
   { key: 'condicionContable', label: 'Condición contable', width: 150 },
   { key: 'responsable', label: 'Responsable', width: 230 },
-];
+  ];
+}
 
 const COLUMNAS_PLIEGO: ReportTableColumn[] = [
   { key: 'periodo', label: 'Periodo', width: 110 },
@@ -39,10 +43,7 @@ const COLUMNAS_PLIEGO: ReportTableColumn[] = [
   { key: 'responsable', label: 'Responsable', width: 230 },
 ];
 
-const TABS: TabItem[] = [
-  { id: 'general', label: 'Situación de apertura general' },
-  { id: 'pliegos', label: 'Pliegos' },
-];
+
 
 const MENU_SELECCION: IconDropdownMenuItem[] = [
   { label: 'Expandir seleccionados', value: 'expandir' },
@@ -84,6 +85,7 @@ interface Anio {
     IconDropdownMenuComponent,
     PaginationComponent,
     RecordsSearchToolbarComponent,
+    RecordStatusTagComponent,
     ReportTableComponent,
     SnackbarComponent,
     TableControlsComponent,
@@ -103,15 +105,17 @@ interface Anio {
 
       <div class="flex flex-1 flex-col p-siaf-md">
         <div class="flex flex-col gap-siaf-md rounded-siaf-md bg-surface pb-siaf-lg">
-          <siaf-tabs
-            [tabs]="tabs"
-            [activeId]="pestanaActiva()"
-            [border]="false"
-            ariaLabel="Configuración de apertura contable mensual"
-            (activeIdChange)="cambiarPestana($event)"
-          />
+          @if (!modoPeriodos) {
+            <siaf-tabs
+              [tabs]="tabs"
+              [activeId]="pestanaActiva()"
+              [border]="false"
+              ariaLabel="Configuración de apertura contable mensual"
+              (activeIdChange)="cambiarPestana($event)"
+            />
+          }
 
-          <div class="flex flex-col gap-siaf-md px-siaf-lg">
+          <div class="flex flex-col gap-siaf-md px-siaf-lg" [class.pt-siaf-md]="modoPeriodos">
             <h2 class="m-0 text-base font-bold uppercase leading-normal tracking-[0.02px] text-[var(--sys-color-text-neutral-high)]">
               Aperturas contables mensuales
             </h2>
@@ -128,13 +132,13 @@ interface Anio {
             </siaf-records-search-toolbar>
 
             <siaf-table-controls
-              selectAllLabel="Seleccionar pliegos"
-              [showSelection]="pestanaActiva() === 'pliegos'"
+              [selectAllLabel]="'Seleccionar ' + vista.entidadPlural.toLowerCase()"
+              [showSelection]="modoPeriodos || pestanaActiva() === 'pliegos'"
               [checked]="todosSeleccionados()"
               [indeterminate]="algunosSeleccionados()"
               [selectedCount]="seleccionados().size"
-              [showEditAction]="pestanaActiva() === 'pliegos'"
-              [showDeleteAction]="pestanaActiva() === 'pliegos'"
+              [showEditAction]="modoPeriodos || pestanaActiva() === 'pliegos'"
+              [showDeleteAction]="modoPeriodos || pestanaActiva() === 'pliegos'"
               [editDisabled]="seleccionados().size !== 1"
               [deleteDisabled]="true"
               [page]="pagina()"
@@ -146,13 +150,80 @@ interface Anio {
               (previous)="paginaAnterior()"
               (next)="paginaSiguiente()"
             >
-              <siaf-icon-dropdown-menu tableAction icon="more_vert" ariaLabel="Acciones sobre la selección" [items]="menuSeleccion" (selected)="accionSeleccion($event)" />
+              <siaf-icon-dropdown-menu tableAction icon="more_vert" ariaLabel="Acciones sobre la selección" [items]="modoPeriodos ? menuSeleccionPeriodos : menuSeleccion" (selected)="accionSeleccion($event)" />
             </siaf-table-controls>
 
-            @if (pestanaActiva() === 'pliegos') {
-              <div role="treegrid" aria-label="Situación de apertura por pliego">
+            @if (modoPeriodos) {
+              <div class="siaf-table-scroll rounded-siaf-sm" role="region" tabindex="0" aria-label="Aperturas contables mensuales">
+                <table class="w-full min-w-full border-collapse text-left text-sm" aria-label="Aperturas contables mensuales">
+                  <thead>
+                    <tr>
+                      <th class="w-14 px-siaf-md py-siaf-sm" scope="col"></th>
+                      @for (columna of columnasPeriodosUe; track columna.key) {
+                        <th class="h-10 px-siaf-md py-siaf-sm text-xs font-bold uppercase text-[var(--sys-color-text-neutral-high)]" scope="col" [style.min-width.px]="columna.width">
+                          <span class="block truncate">{{ columna.label }}</span>
+                        </th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="border-b border-[var(--sys-color-divider-default)] bg-surface">
+                      <td colspan="9" class="p-0">
+                        <button
+                          type="button"
+                          class="flex min-h-12 w-full items-center gap-siaf-md px-siaf-md text-left text-sm font-bold text-[var(--sys-color-text-neutral-high)] hover:bg-[var(--sys-color-bg-states-light-hover)]"
+                          [attr.aria-expanded]="anioUeAbierto()"
+                          (click)="anioUeAbierto.set(!anioUeAbierto())"
+                        >
+                          <siaf-icon [name]="anioUeAbierto() ? 'expand_less' : 'expand_more'" [size]="24" />
+                          2026
+                        </button>
+                      </td>
+                    </tr>
+                    @if (anioUeAbierto()) {
+                      @for (fila of periodosUePagina(); track fila.periodo) {
+                        <tr
+                          class="h-14 border-b border-[var(--sys-color-divider-default)] text-[var(--sys-color-text-neutral-medium)]"
+                          [class.bg-[var(--sys-color-bg-states-light-selected)]]="seleccionados().has(fila.periodo)"
+                        >
+                          <td class="px-siaf-sm">
+                            <siaf-checkbox
+                              [checked]="seleccionados().has(fila.periodo)"
+                              [attr.aria-label]="'Seleccionar periodo ' + fila.periodo"
+                              (checkedChange)="seleccionar(fila.periodo, $event)"
+                            />
+                          </td>
+                          <td class="px-siaf-md py-siaf-sm">
+                            <button
+                              type="button"
+                              class="rounded-siaf-sm text-left hover:text-[var(--sys-color-text-brand-primary)] active:text-[var(--sys-color-text-brand-primary)] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-states-focus)]"
+                              [attr.aria-label]="'Ver la apertura contable del periodo ' + fila.periodo"
+                              (click)="verDetallePeriodo(fila.periodo)"
+                            >
+                              {{ fila.periodo }}
+                            </button>
+                          </td>
+                          <td class="px-siaf-md py-siaf-sm">{{ fila.fechaInicio }}</td>
+                          <td class="px-siaf-md py-siaf-sm">{{ fila.fechaFin }}</td>
+                          <td class="px-siaf-md py-siaf-sm font-bold">{{ fila.cierreOperativo }}</td>
+                          <td class="px-siaf-md py-siaf-sm"><siaf-record-status-tag [status]="estadoDe(fila)" /></td>
+                          <td class="px-siaf-md py-siaf-sm font-bold">{{ fila.cierreContable }}</td>
+                          <td class="px-siaf-md py-siaf-sm font-bold">{{ fila.condicionContable }}</td>
+                          <td class="px-siaf-md py-siaf-sm">{{ fila.responsable }}</td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                          <td colspan="9" class="px-siaf-md py-siaf-lg text-center text-sm text-[var(--sys-color-text-neutral-medium)]">No se encontraron resultados con la búsqueda aplicada.</td>
+                        </tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else if (pestanaActiva() === 'pliegos') {
+              <div role="treegrid" [attr.aria-label]="'Situación de apertura por ' + vista.entidadSingular.toLowerCase()">
                 <div class="flex min-h-10 items-center border-b border-[var(--sys-color-divider-strong)] bg-[var(--sys-color-bg-surfaces-surface-high)] px-siaf-md py-siaf-sm" role="row">
-                  <span class="pl-[96px] text-xs font-bold uppercase text-[var(--sys-color-text-neutral-high)]" role="columnheader">Pliegos</span>
+                  <span class="pl-[96px] text-xs font-bold uppercase text-[var(--sys-color-text-neutral-high)]" role="columnheader">{{ vista.entidadPlural }}</span>
                 </div>
 
                 @for (pliego of pliegosPagina(); track pliego.id) {
@@ -270,8 +341,8 @@ interface Anio {
                     </div>
 
                     @if (estaAbierto(periodo.id)) {
-                      <div class="bg-[var(--sys-color-bg-surfaces-surface-lowest)] p-siaf-md pl-[112px]">
-                        <siaf-report-table [columns]="columnas" [rows]="periodo.filas" [ariaLabel]="'Pliegos del periodo ' + periodo.etiqueta" />
+                      <div class="bg-[var(--sys-color-bg-surfaces-surface-lowest)] p-siaf-md">
+                        <siaf-report-table [columns]="columnas" [rows]="periodo.filas" [ariaLabel]="vista.entidadPlural + ' del periodo ' + periodo.etiqueta" />
                       </div>
                     }
                   }
@@ -314,11 +385,19 @@ export class AperturaContableMensualConfiguracionComponent {
   private readonly route = inject(ActivatedRoute);
 
   readonly breadcrumbs = buildProcessBreadcrumbs(CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE, 'Configuración de apertura contable mensual');
-  readonly columnas = COLUMNAS;
+  private readonly vistaAmbito = inject(VistaAperturaService).vista();
+  readonly vista = this.vistaAmbito;
+  readonly columnas = columnasGeneral(this.vistaAmbito.columnaEntidad);
   readonly columnasPliego = COLUMNAS_PLIEGO;
-  readonly tabs = TABS;
+  readonly columnasPeriodosUe: ReportTableColumn[] = COLUMNAS_PLIEGO;
+  readonly modoPeriodos = this.vistaAmbito.modo === 'periodos';
+  readonly tabs: TabItem[] = [
+    { id: 'general', label: 'Situación de apertura general' },
+    { id: 'pliegos', label: this.vistaAmbito.entidadPlural },
+  ];
   readonly menuArbol = MENU_ARBOL;
   readonly menuSeleccion = MENU_SELECCION;
+  readonly menuSeleccionPeriodos: IconDropdownMenuItem[] = [{ label: 'Limpiar selección', value: 'limpiar' }];
 
   readonly pestanaActiva = signal<'general' | 'pliegos'>(this.route.snapshot.queryParamMap.get('tab') === 'pliegos' ? 'pliegos' : 'general');
   readonly avisoAbierto = signal(false);
@@ -338,13 +417,13 @@ export class AperturaContableMensualConfiguracionComponent {
 
   /** Abiertos al entrar, como en el diseño: el año y sus dos primeros periodos. */
   private readonly abiertos = signal<ReadonlySet<string>>(
-    new Set(['2026', '2026 - 01', '2026 - 02', 'MINISTERIO DE SALUD', 'MINISTERIO DE SALUD|2026']),
+    new Set(['2026', '2026 - 01', '2026 - 02', this.vistaAmbito.entidadesLista[0], `${this.vistaAmbito.entidadesLista[0]}|2026`]),
   );
 
   readonly seleccionados = signal<ReadonlySet<string>>(new Set());
 
   private readonly anios: Anio[] = this.agruparPorAnio();
-  private readonly pliegos: SituacionPliego[] = generarSituacionPorPliego();
+  private readonly pliegos: SituacionPliego[] = generarSituacionPorPliego(this.vistaAmbito.entidadesLista);
 
   readonly aniosFiltrados = computed<Anio[]>(() => {
     const termino = this.normalizar(this.busqueda());
@@ -366,7 +445,22 @@ export class AperturaContableMensualConfiguracionComponent {
     return this.pliegos.filter((p) => this.normalizar(p.pliego).includes(termino) || p.periodos.some((fila) => this.coincide({ ...fila }, termino)));
   });
 
-  readonly totalItems = computed(() => (this.pestanaActiva() === 'pliegos' ? this.pliegosFiltrados().length : this.aniosFiltrados().length));
+  private readonly periodosUe: SituacionPeriodoPliego[] = this.modoPeriodos ? generarSituacionPorPliego(this.vistaAmbito.entidadesLista)[0].periodos : [];
+  readonly anioUeAbierto = signal(true);
+
+  readonly periodosUeFiltrados = computed(() => {
+    const termino = this.normalizar(this.busqueda());
+    return termino ? this.periodosUe.filter((p) => this.normalizar(Object.values(p).join(' ')).includes(termino)) : this.periodosUe;
+  });
+  readonly periodosUePagina = computed(() => {
+    const inicio = (this.pagina() - 1) * this.filasPorPagina();
+    return this.periodosUeFiltrados().slice(inicio, inicio + this.filasPorPagina());
+  });
+
+  readonly totalItems = computed(() => {
+    if (this.modoPeriodos) return this.periodosUeFiltrados().length;
+    return this.pestanaActiva() === 'pliegos' ? this.pliegosFiltrados().length : this.aniosFiltrados().length;
+  });
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.totalItems() / this.filasPorPagina())));
 
@@ -380,8 +474,16 @@ export class AperturaContableMensualConfiguracionComponent {
     return this.pliegosFiltrados().slice(inicio, inicio + this.filasPorPagina());
   });
 
-  readonly todosSeleccionados = computed(() => this.pliegosPagina().length > 0 && this.pliegosPagina().every((p) => this.seleccionados().has(p.id)));
-  readonly algunosSeleccionados = computed(() => !this.todosSeleccionados() && this.pliegosPagina().some((p) => this.seleccionados().has(p.id)));
+  /** Ids de las filas seleccionables de la página: pliegos o unidades ejecutoras, o los periodos de la UE. */
+  private idsSeleccionables(): string[] {
+    return this.modoPeriodos ? this.periodosUePagina().map((p) => p.periodo) : this.pliegosPagina().map((p) => p.id);
+  }
+
+  readonly todosSeleccionados = computed(() => {
+    const ids = this.idsSeleccionables();
+    return ids.length > 0 && ids.every((id) => this.seleccionados().has(id));
+  });
+  readonly algunosSeleccionados = computed(() => !this.todosSeleccionados() && this.idsSeleccionables().some((id) => this.seleccionados().has(id)));
 
   /** Con búsqueda activa se abren todas las ramas para mostrar las coincidencias. */
   estaAbierto(id: string): boolean {
@@ -406,8 +508,16 @@ export class AperturaContableMensualConfiguracionComponent {
     this.abiertos.set(new Set(ids));
   }
 
+  estadoDe(fila: SituacionPeriodoPliego): RecordStatus {
+    return fila.estadoOperativo as RecordStatus;
+  }
+
   valorDe(fila: SituacionPeriodoPliego, clave: string): string {
     return fila[clave as keyof SituacionPeriodoPliego];
+  }
+
+  verDetallePeriodo(periodo: string): void {
+    void this.router.navigate([DETALLE_ROUTE, this.vistaAmbito.entidadesLista[0]], { queryParams: { periodo } });
   }
 
   verDetalle(id: string): void {
@@ -416,7 +526,11 @@ export class AperturaContableMensualConfiguracionComponent {
 
   editarSeleccionado(): void {
     const [id] = [...this.seleccionados()];
-    if (this.seleccionados().size === 1 && id) void this.router.navigate([EDITAR_ROUTE, id]);
+    if (this.seleccionados().size !== 1 || !id) return;
+
+    // La UE elige un periodo en la tabla: la edición abre su unidad con ese periodo ya cargado.
+    if (this.modoPeriodos) void this.router.navigate([EDITAR_ROUTE, this.vistaAmbito.entidadesLista[0]], { queryParams: { periodo: id } });
+    else void this.router.navigate([EDITAR_ROUTE, id]);
   }
 
   accionSeleccion(accion: string): void {
@@ -441,9 +555,9 @@ export class AperturaContableMensualConfiguracionComponent {
 
   seleccionarTodos(marcado: boolean): void {
     const siguiente = new Set(this.seleccionados());
-    for (const pliego of this.pliegosPagina()) {
-      if (marcado) siguiente.add(pliego.id);
-      else siguiente.delete(pliego.id);
+    for (const id of this.idsSeleccionables()) {
+      if (marcado) siguiente.add(id);
+      else siguiente.delete(id);
     }
     this.seleccionados.set(siguiente);
   }
@@ -480,7 +594,7 @@ export class AperturaContableMensualConfiguracionComponent {
   private agruparPorAnio(): Anio[] {
     const porAnio = new Map<string, Map<string, ReportTableRow[]>>();
 
-    for (const registro of generarRegistrosAperturaContableMensual()) {
+    for (const registro of generarRegistrosAperturaContableMensual(this.vistaAmbito.entidadesGeneral)) {
       const anio = registro.periodo.split(' - ')[0];
       const periodos = porAnio.get(anio) ?? new Map<string, ReportTableRow[]>();
       periodos.set(registro.periodo, [...(periodos.get(registro.periodo) ?? []), { ...registro }]);

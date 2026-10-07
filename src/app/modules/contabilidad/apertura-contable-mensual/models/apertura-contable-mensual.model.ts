@@ -22,13 +22,13 @@ const ultimoDia = (mes: number): number => new Date(AÑO, mes, 0).getDate();
  * Datos de ejemplo de los 12 periodos del año (el Figma solo detalla enero y febrero; el resto sigue el mismo
  * patrón: cierre operativo el 10 y cierre contable el 18 del mes siguiente).
  */
-export function generarRegistrosAperturaContableMensual(): AperturaContableMensualRegistro[] {
+export function generarRegistrosAperturaContableMensual(entidades: readonly string[] = PLIEGOS): AperturaContableMensualRegistro[] {
   const registros: AperturaContableMensualRegistro[] = [];
 
   for (let mes = 1; mes <= 12; mes++) {
     const mesCierre = mes === 12 ? 1 : mes + 1;
 
-    for (const pliego of PLIEGOS) {
+    for (const pliego of entidades) {
       registros.push({
         periodo: `${AÑO} - ${String(mes).padStart(2, '0')}`,
         pliego,
@@ -89,8 +89,8 @@ const CIERRES_CONTABLES: Record<number, { condicion: string; abierto?: boolean }
  * Ministerio de Salud; los demás pliegos siguen el mismo patrón. El periodo 13 se muestra como «2027 - 13», como en
  * el diseño.
  */
-export function generarSituacionPorPliego(): SituacionPliego[] {
-  return PLIEGOS_SITUACION.map((pliego) => {
+export function generarSituacionPorPliego(entidades: readonly string[] = PLIEGOS_SITUACION): SituacionPliego[] {
+  return entidades.map((pliego) => {
     const periodos: SituacionPeriodoPliego[] = [];
 
     for (let mes = 1; mes <= 13; mes++) {
@@ -116,6 +116,12 @@ export function generarSituacionPorPliego(): SituacionPliego[] {
     return { id: pliego, pliego, periodos };
   });
 }
+
+/** Clave del `localStorage` con las configuraciones editadas de cada pliego (el reinicio de datos de la demo la borra). */
+export const CLAVE_CONFIGURACIONES_APERTURA = 'taller-siaf-rp:apertura-configuraciones';
+
+/** Clave del `localStorage` con el estado de los documentos de apertura mensual (el reinicio de datos de la demo la borra). */
+export const CLAVE_DOCUMENTOS_APERTURA = 'taller-siaf-rp:apertura-documentos';
 
 /** Una fila del historial de la configuración de un periodo. */
 export interface EntradaHistorial {
@@ -144,21 +150,23 @@ export interface ConfiguracionPliego {
   fechaFin: string;
   fechaCierre: string;
   justificacion: string;
-  archivo: { name: string; size: number };
+  /** `null` si nunca se adjuntó un documento. */
+  archivo: { name: string; size: number } | null;
   historial: EntradaHistorial[];
 }
 
 /**
  * Configuración de ejemplo del detalle: el Figma muestra la del Ministerio de Salud (enero de 2026, con el cierre
- * operativo modificado) y los demás pliegos usan la misma.
+ * operativo modificado) y los demás pliegos usan la misma. Con `periodo` (la UE abre el detalle de un periodo) toma
+ * las fechas de ese periodo.
  */
-export function generarConfiguracionDePliego(): ConfiguracionPliego {
+export function generarConfiguracionDePliego(periodo?: SituacionPeriodoPliego): ConfiguracionPliego {
   return {
-    periodo: '2026 - 01',
+    periodo: periodo?.periodo ?? '2026 - 01',
     tipoCierre: 'Operativo',
-    fechaInicio: '01/01/2026',
-    fechaFin: '31/01/2026',
-    fechaCierre: '18/02/2026',
+    fechaInicio: periodo?.fechaInicio ?? '01/01/2026',
+    fechaFin: periodo?.fechaFin ?? '31/01/2026',
+    fechaCierre: periodo?.cierreOperativo ?? '18/02/2026',
     justificacion: 'Solicito la modificación de la Fecha cierre operativo',
     archivo: { name: 'DocEntregable001.pdf', size: 512_000 },
     historial: [
@@ -166,4 +174,75 @@ export function generarConfiguracionDePliego(): ConfiguracionPliego {
       { item: 1, fechaHora: '13/02/2026 09:05:34', tipoAccion: 'Creación', usuario: 'SIAF - RP', cierreContable: '06/02/2026', estado: 'Cerrado' },
     ],
   };
+}
+
+/**
+ * Qué cambia de la pantalla «Configuración de apertura contable mensual» según el ámbito del creador. El DGCP trabaja
+ * con pliegos (Figma node-id 2404:122064 y 3142:170479); el Pliego, con sus unidades ejecutoras (node-id 3160:302848).
+ */
+export interface VistaAmbito {
+  /** `tabs`: «Situación de apertura general» y la lista de entidades; `periodos`: una sola tabla con los periodos de la entidad. */
+  modo: 'tabs' | 'periodos';
+  /** Nombre de la segunda pestaña y del encabezado de su tabla. */
+  entidadPlural: string;
+  /** Sección y rótulos de las pantallas de edición y detalle («Pliego», «Unidad ejecutora»). */
+  entidadSingular: string;
+  /** Rótulo de la primera columna de las sub-tablas de la pestaña general («Pliego», «UE»). */
+  columnaEntidad: string;
+  etiquetaNombre: string;
+  /** Entidades que se muestran dentro de cada periodo de la pestaña «Situación de apertura general». */
+  entidadesGeneral: readonly string[];
+  /** Entidades de la segunda pestaña (en mayúsculas, como en el Figma). */
+  entidadesLista: readonly string[];
+}
+
+const VISTA_DGCP: VistaAmbito = {
+  modo: 'tabs',
+  entidadPlural: 'Pliegos',
+  entidadSingular: 'Pliego',
+  columnaEntidad: 'Pliego',
+  etiquetaNombre: 'Nombre del pliego',
+  entidadesGeneral: PLIEGOS,
+  entidadesLista: PLIEGOS_SITUACION,
+};
+
+const UNIDADES_EJECUTORAS = ['Hospital Hermilio Valdizan', 'Hospital Maria Auxiliadora', 'Hospital Sergio Bernales'];
+
+/** Unidades ejecutoras de la pestaña «Unidades ejecutoras» (Figma node-id 2429:89759). */
+const LISTA_UNIDADES_EJECUTORAS = [
+  'HOSPITAL HERMILIO VALDIZAN',
+  'HOSPITAL SERGIO BERNALES',
+  'HOSPITAL CAYETANO HEREDIA',
+  'HOSPITAL DE APOYO DEPARTAMENTAL MARIA AUXILIADORA',
+  'HOSPITAL NACIONAL ARZOBISPO LOAYZA',
+  'HOSPITAL NACIONAL DOS DE MAYO',
+  'HOSPITAL DE APOYO SANTA ROSA',
+  'HOSPITAL DE EMERGENCIAS CASIMIRO ULLOA',
+  'HOSPITAL DE EMERGENCIAS PEDIATRICAS',
+];
+
+const VISTA_PLIEGO: VistaAmbito = {
+  modo: 'tabs',
+  entidadPlural: 'Unidades ejecutoras',
+  entidadSingular: 'Unidad ejecutora',
+  columnaEntidad: 'UE',
+  etiquetaNombre: 'Nombre de la unidad ejecutora',
+  entidadesGeneral: UNIDADES_EJECUTORAS,
+  entidadesLista: LISTA_UNIDADES_EJECUTORAS,
+};
+
+/** La unidad ejecutora ve solo sus periodos, sin pestañas (Figma node-id 2522:36943). */
+const VISTA_UE: VistaAmbito = {
+  modo: 'periodos',
+  entidadPlural: 'Unidades ejecutoras',
+  entidadSingular: 'Unidad ejecutora',
+  columnaEntidad: 'UE',
+  etiquetaNombre: 'Nombre de la unidad ejecutora',
+  entidadesGeneral: ['Hospital Nacional Dos de Mayo'],
+  entidadesLista: ['HOSPITAL NACIONAL DOS DE MAYO'],
+};
+
+export function vistaDeAmbito(ambito: 'DGCP' | 'PLIEGO' | 'UE' | null | undefined): VistaAmbito {
+  if (ambito === 'PLIEGO') return VISTA_PLIEGO;
+  return ambito === 'UE' ? VISTA_UE : VISTA_DGCP;
 }

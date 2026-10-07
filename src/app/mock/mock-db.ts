@@ -8,6 +8,7 @@ import {
   CuentaBancariaRegistro,
   NOMBRE_DOCUMENTO,
 } from '../modules/tesoreria/cuentas-bancarias/models/cuenta-bancaria.model';
+import { CLAVE_CONFIGURACIONES_APERTURA, CLAVE_DOCUMENTOS_APERTURA } from '../modules/contabilidad/apertura-contable-mensual/models/apertura-contable-mensual.model';
 import { USUARIOS_DEMO, UsuarioDemo } from './usuarios-demo';
 
 /**
@@ -72,6 +73,12 @@ export function guardarDatos(datos: DatosTaller): void {
 /** Vuelve a los datos iniciales de la demo. */
 export function reiniciarDatosDemo(): void {
   guardarDatos(crearDatosIniciales());
+  try {
+    localStorage.removeItem(CLAVE_CONFIGURACIONES_APERTURA);
+    localStorage.removeItem(CLAVE_DOCUMENTOS_APERTURA);
+  } catch {
+    // Sin almacenamiento: no hay nada que borrar.
+  }
 }
 
 export function nuevoId(datos: DatosTaller, prefijo: string): string {

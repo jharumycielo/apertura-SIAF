@@ -15,11 +15,13 @@ import { TextAreaControlComponent } from '../../../../../shared/ui/text-area-con
 import { UploadSideNavComponent } from '../../../../../shared/ui/upload-side-nav/upload-side-nav.component';
 import { UploadedFileCardComponent, UploadedFileInfo } from '../../../../../shared/ui/uploaded-file-card/uploaded-file-card.component';
 import { buildProcessBreadcrumbs } from '../../../../../shared/utils/breadcrumbs.util';
-import { ddmmyyyyToIso } from '../../../../../shared/utils/fecha.util';
+import { ddmmyyyyToIso, isoToDdmmyyyy } from '../../../../../shared/utils/fecha.util';
 import { crearSnapshotFormulario, hayCambiosRespectoAlSnapshot, identidadArchivo } from '../../../../../shared/utils/form-snapshot.util';
 import { MIN_CARACTERES_TEXTO_LIBRE, cumpleMinimoTextoLibre } from '../../../../../shared/utils/texto-libre.util';
 import { HistorialConfiguracionComponent } from '../../components/historial-configuracion.component';
 import { CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE } from '../../config/apertura-contable-mensual.rutas';
+import { VistaAperturaService } from '../../services/vista-apertura.service';
+import { ConfiguracionPliegoService } from '../../services/configuracion-pliego.service';
 import { EntradaHistorial, SituacionPeriodoPliego, SituacionPliego, generarSituacionPorPliego } from '../../models/apertura-contable-mensual.model';
 
 type TipoCierre = 'operativo' | 'contable';
@@ -87,7 +89,7 @@ const COLUMNAS_PANEL = [
           </div>
 
           <section class="flex flex-col gap-siaf-sm" aria-labelledby="seccion-pliego">
-            <h3 id="seccion-pliego" class="m-0 text-sm font-bold uppercase text-text">Pliego</h3>
+            <h3 id="seccion-pliego" class="m-0 text-sm font-bold uppercase text-text">{{ vista.entidadSingular }}</h3>
             <siaf-summary-card [bordered]="true" [showClose]="false" [fields]="camposPliego()" />
           </section>
 
@@ -192,7 +194,7 @@ const COLUMNAS_PANEL = [
       (closed)="panelPeriodoAbierto.set(false)"
     >
       <div class="siaf-sidepanel-table-scroll">
-        <table class="w-full min-w-[1000px] border-collapse text-left text-sm" aria-label="Periodos del pliego">
+        <table class="w-full min-w-[1000px] border-collapse text-left text-sm" [attr.aria-label]="'Periodos de ' + (pliego()?.pliego ?? '')">
           <thead>
             <tr class="h-10 bg-[var(--sys-color-bg-surfaces-surface-high)] text-xs font-bold uppercase text-text">
               <th class="w-12 rounded-l-siaf-sm px-siaf-sm"></th>
@@ -275,6 +277,8 @@ const COLUMNAS_PANEL = [
 export class AperturaContableMensualEditarComponent {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly configuraciones = inject(ConfiguracionPliegoService);
+  readonly vista = inject(VistaAperturaService).vista();
 
   readonly breadcrumbs = buildProcessBreadcrumbs(CONFIGURACION_PROCESS_ID, CONFIGURACION_ROUTE, 'Editar apertura contable mensual');
   readonly tiposCierre = TIPOS_CIERRE;
@@ -284,7 +288,7 @@ export class AperturaContableMensualEditarComponent {
   readonly pliego = signal<SituacionPliego | null>(this.buscarPliego());
 
   readonly tipoCierre = signal<TipoCierre>('operativo');
-  readonly periodo = signal<SituacionPeriodoPliego | null>(null);
+  readonly periodo = signal<SituacionPeriodoPliego | null>(this.periodoInicial());
   readonly fechaInicio = signal(this.fechaInicial('fechaInicio'));
   readonly fechaFin = signal(this.fechaInicial('fechaFin'));
   readonly fechaCierre = signal(this.fechaInicial('cierreOperativo'));
@@ -314,7 +318,7 @@ export class AperturaContableMensualEditarComponent {
     }
     return entradas;
   });
-  readonly camposPliego = computed<SummaryCardField[]>(() => [{ label: 'Nombre del pliego', value: this.pliego()?.pliego ?? '' }]);
+  readonly camposPliego = computed<SummaryCardField[]>(() => [{ label: this.vista.etiquetaNombre, value: this.pliego()?.pliego ?? '' }]);
   readonly camposPeriodo = computed<SummaryCardField[]>(() => {
     const elegido = this.periodo();
     return elegido ? [{ label: 'Periodo mensual', value: elegido.periodo }] : [];
@@ -385,7 +389,20 @@ export class AperturaContableMensualEditarComponent {
   /** Aceptar en el modal: vuelve a «Pliegos», donde se muestra el aviso de éxito. */
   confirmarGrabar(): void {
     this.modalGrabar.set(false);
-    if (!this.puedeGrabar()) return;
+    const periodo = this.periodo();
+    const pliego = this.pliego();
+    if (!this.puedeGrabar() || !periodo || !pliego) return;
+
+    const archivo = this.sustento();
+    this.configuraciones.guardar(this.claveConfiguracion(pliego.id, periodo.periodo), {
+      periodo,
+      tipoCierre: this.tipoCierre() === 'operativo' ? 'Operativo' : 'Contable',
+      fechaInicio: isoToDdmmyyyy(this.fechaInicio()),
+      fechaFin: isoToDdmmyyyy(this.fechaFin()),
+      fechaCierre: isoToDdmmyyyy(this.fechaCierre()),
+      justificacion: this.justificacion().trim(),
+      archivo: archivo ? { name: archivo.name, size: archivo.size ?? 0 } : null,
+    });
     void this.router.navigate([CONFIGURACION_ROUTE], { queryParams: { tab: 'pliegos' }, state: { grabado: true } });
   }
 
@@ -395,11 +412,22 @@ export class AperturaContableMensualEditarComponent {
 
   private buscarPliego(): SituacionPliego | null {
     const id = this.route.snapshot.paramMap.get('pliegoId') ?? '';
-    return generarSituacionPorPliego().find((p) => p.id === id) ?? null;
+    return generarSituacionPorPliego(this.vista.entidadesLista).find((p) => p.id === id) ?? null;
+  }
+
+  /** La UE llega con un periodo (`?periodo=`) y guarda una configuración por periodo; las demás vistas, una por entidad. */
+  private claveConfiguracion(entidadId: string, periodo: string): string {
+    return this.route.snapshot.queryParamMap.get('periodo') ? `${entidadId}|${periodo}` : entidadId;
+  }
+
+  /** La UE llega con el periodo que eligió en la tabla (`?periodo=`); las demás vistas lo eligen aquí. */
+  private periodoInicial(): SituacionPeriodoPliego | null {
+    const id = this.route.snapshot.queryParamMap.get('periodo');
+    return id ? (this.pliego()?.periodos.find((p) => p.periodo === id) ?? null) : null;
   }
 
   private fechaInicial(campo: 'fechaInicio' | 'fechaFin' | 'cierreOperativo'): string {
-    return ddmmyyyyToIso(this.pliego()?.periodos[0]?.[campo] ?? '');
+    return ddmmyyyyToIso((this.periodo() ?? this.pliego()?.periodos[0])?.[campo] ?? '');
   }
 
   private fechaDeCierre(periodo: SituacionPeriodoPliego | undefined): string {
