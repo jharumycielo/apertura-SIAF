@@ -11808,6 +11808,13 @@ export const MANIFIESTO_UI_KIT: readonly FichaComponente[] = [
         "descripcion": null
       },
       {
+        "nombre": "observeDisabled",
+        "tipo": "boolean",
+        "porDefecto": "false",
+        "requerida": false,
+        "descripcion": "Observar visible pero deshabilitado (procesos donde el aprobador solo aprueba o rechaza)."
+      },
+      {
         "nombre": "observeLabel",
         "tipo": "string",
         "porDefecto": "'Observar'",
@@ -12233,6 +12240,13 @@ export const MANIFIESTO_UI_KIT: readonly FichaComponente[] = [
       },
       {
         "nombre": "loading",
+        "tipo": "boolean",
+        "porDefecto": "false",
+        "requerida": false,
+        "descripcion": null
+      },
+      {
+        "nombre": "observeDisabled",
         "tipo": "boolean",
         "porDefecto": "false",
         "requerida": false,

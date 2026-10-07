@@ -363,7 +363,7 @@ const MOBILE_PRIMARY_ACTION_CLASS =
             <siaf-button variant="secondary" size="md" icon="content_paste_off" (click)="rejected.emit()">{{ rejectLabel }}</siaf-button>
           }
           @if (resolvedShowObserve) {
-            <siaf-button variant="secondary" size="md" icon="assignment_late" (click)="observed.emit()">{{ observeLabel }}</siaf-button>
+            <siaf-button variant="secondary" size="md" icon="assignment_late" [disabled]="observeDisabled" (click)="observed.emit()">{{ observeLabel }}</siaf-button>
           }
           @if (resolvedShowDelete) {
             <siaf-button variant="secondary" size="md" icon="delete" [disabled]="resolvedDeleteDisabled" (click)="deleted.emit()">{{ deleteLabel }}</siaf-button>
@@ -433,6 +433,8 @@ export class SolicitudeHeaderComponent {
   @Input() saveVariant: SolicitudeHeaderButtonTone = 'secondary';
   @Input() saveDisabled = false;
   @Input() verifyDisabled = false;
+  /** Observar visible pero deshabilitado (procesos donde el aprobador solo aprueba o rechaza). */
+  @Input() observeDisabled = false;
   @Input() showDelete = false;
   @Input() showEdit = false;
   @Input() showVerify = true;
@@ -539,7 +541,7 @@ export class SolicitudeHeaderComponent {
     }
 
     add(this.resolvedShowReject, this.rejectLabel, 'content_paste_off', 'secondary', false, this.rejected);
-    add(this.resolvedShowObserve, this.observeLabel, 'assignment_late', 'secondary', false, this.observed);
+    add(this.resolvedShowObserve, this.observeLabel, 'assignment_late', 'secondary', this.observeDisabled, this.observed);
     add(this.resolvedShowDelete, this.deleteLabel, 'delete', 'secondary', this.resolvedDeleteDisabled, this.deleted);
     add(this.resolvedShowEdit, this.editLabel, 'edit', this.resolvedEditVariant, false, this.edited);
     add(this.resolvedShowApprove, this.approveLabel, 'inventory', 'accent', false, this.approved);
