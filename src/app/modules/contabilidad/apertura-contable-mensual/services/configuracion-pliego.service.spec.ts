@@ -1,14 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 
 import { CurrentUserService } from '../../../../core/auth/current-user.service';
-import { CLAVE_CONFIGURACIONES_APERTURA, generarSituacionPorPliego } from '../models/apertura-contable-mensual.model';
+import { CLAVE_CONFIGURACIONES_APERTURA, CLAVE_DOCUMENTOS_CREADOS, generarSituacionPorPliego } from '../models/apertura-contable-mensual.model';
 import { ConfiguracionPliegoService, EdicionPliego } from './configuracion-pliego.service';
+import { DocumentoAperturaService } from './documento-apertura.service';
 
 describe('ConfiguracionPliegoService', () => {
   let servicio: ConfiguracionPliegoService;
   const [salud, defensa] = generarSituacionPorPliego();
 
   const edicion = (pliego = defensa): EdicionPliego => ({
+    entidadNombre: pliego.pliego,
     periodo: pliego.periodos[1],
     tipoCierre: 'Contable',
     fechaInicio: '01/02/2026',
@@ -20,10 +22,14 @@ describe('ConfiguracionPliegoService', () => {
 
   beforeEach(() => {
     localStorage.removeItem(CLAVE_CONFIGURACIONES_APERTURA);
+    localStorage.removeItem(CLAVE_DOCUMENTOS_CREADOS);
     servicio = TestBed.inject(ConfiguracionPliegoService);
   });
 
-  afterAll(() => localStorage.removeItem(CLAVE_CONFIGURACIONES_APERTURA));
+  afterAll(() => {
+    localStorage.removeItem(CLAVE_CONFIGURACIONES_APERTURA);
+    localStorage.removeItem(CLAVE_DOCUMENTOS_CREADOS);
+  });
 
   it('un pliego que nunca se editó muestra la configuración de ejemplo', () => {
     const configuracion = servicio.obtener(defensa.id);
@@ -70,6 +76,19 @@ describe('ConfiguracionPliegoService', () => {
 
     usuario.setUser({ name: 'Creador', office: 'MEF - DGCP', nivelAmbito: 'DGCP' });
     expect(servicio.obtener(defensa.id).tipoCierre).toBe('Contable');
+  });
+
+  it('cada edición grabada genera un documento «Configuración mensual» verificado para el aprobador', () => {
+    const documentos = TestBed.inject(DocumentoAperturaService);
+    const antes = documentos.listar().length;
+
+    servicio.guardar(defensa.id, edicion());
+
+    const lista = documentos.listar();
+    expect(lista.length).toBe(antes + 1);
+    expect(lista[0].nombreEntidad).toBe(defensa.pliego);
+    expect(lista[0].configuracion.tipoCierre).toBe('Contable');
+    expect(documentos.obtener(lista[0].numero).estado).toBe('Verificado');
   });
 
   it('editar un pliego no cambia a los demás', () => {

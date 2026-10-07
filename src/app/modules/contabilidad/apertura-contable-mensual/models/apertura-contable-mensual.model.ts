@@ -123,6 +123,9 @@ export const CLAVE_CONFIGURACIONES_APERTURA = 'taller-siaf-rp:apertura-configura
 /** Clave del `localStorage` con el estado de los documentos de apertura mensual (el reinicio de datos de la demo la borra). */
 export const CLAVE_DOCUMENTOS_APERTURA = 'taller-siaf-rp:apertura-documentos';
 
+/** Clave del `localStorage` con los documentos «Configuración mensual» que generan las ediciones de los creadores. */
+export const CLAVE_DOCUMENTOS_CREADOS = 'taller-siaf-rp:apertura-documentos-creados';
+
 /** Una fila del historial de la configuración de un periodo. */
 export interface EntradaHistorial {
   item: number;
@@ -245,4 +248,25 @@ const VISTA_UE: VistaAmbito = {
 export function vistaDeAmbito(ambito: 'DGCP' | 'PLIEGO' | 'UE' | null | undefined): VistaAmbito {
   if (ambito === 'PLIEGO') return VISTA_PLIEGO;
   return ambito === 'UE' ? VISTA_UE : VISTA_DGCP;
+}
+
+/**
+ * Documento «Configuración mensual» de «Documentos y registros»: lo que un creador grabó al editar la apertura contable
+ * de un pliego o de una unidad ejecutora, a la espera de que el aprobador de su ámbito lo apruebe, observe o rechace.
+ */
+export interface DocumentoApertura {
+  numero: string;
+  /** Ámbito del creador; decide qué aprobador y qué usuarios lo ven. */
+  ambito: 'DGCP' | 'PLIEGO' | 'UE';
+  /** dd/mm/aaaa, la columna «Fecha de registro» de la lista. */
+  fecha: string;
+  /** dd/mm/aaaa hh:mm:ss, la fecha de la pantalla del documento. */
+  fechaHora: string;
+  /** Entidad de la lista («009 - Ministerio de Economía Finanzas»). */
+  entidad: string;
+  /** «Pliego» o «Unidad ejecutora», según sobre qué trata la configuración. */
+  etiquetaEntidad: 'Pliego' | 'Unidad ejecutora';
+  nombreEntidad: string;
+  creador: string;
+  configuracion: Omit<ConfiguracionPliego, 'historial'>;
 }

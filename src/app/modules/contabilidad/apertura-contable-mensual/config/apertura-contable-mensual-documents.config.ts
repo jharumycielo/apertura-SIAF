@@ -6,6 +6,7 @@ import type {
   DocumentsRecordsMenuOption,
   DocumentsRecordsRow,
 } from '../../../../shared/types/documents-records.types';
+import type { DocumentoApertura } from '../models/apertura-contable-mensual.model';
 import { DOCUMENTOS_ROUTE, SOLICITUD_ROUTE } from './apertura-contable-mensual.rutas';
 
 /**
@@ -58,22 +59,21 @@ const filterValorOptions: DocumentsRecordsFilterOption[] = [
   { label: 'Modificación', value: 'Modificación' },
 ];
 
-/** Documentos de ejemplo del Figma: una configuración mensual verificada, lista para que el aprobador la apruebe. */
-export function documentosDeEjemploAperturaMensual(estado: string = ESTADO.VERIFICADO): DocumentsRecordsRow[] {
-  return [
-    {
-      document: 'Configuración mensual',
-      linkRoute: `${SOLICITUD_ROUTE}/0001`,
-      number: '0001',
-      actionType: 'Modificación',
-      status: estado,
-      system: 'Contabilidad',
-      date: '20/11/2023',
-      entity: '009 - Ministerio de Economía Finanzas',
-      creator: 'RICARDO JOHN DOE BUSTAMANTE',
-      subject: 'Modificación de la fecha de cierre operativo',
-    },
-  ];
+/** La fila de «Documentos existentes» de un documento «Configuración mensual», con el estado en que está. */
+export function filaDeDocumento(documento: DocumentoApertura, estado: string): DocumentsRecordsRow {
+  const { configuracion } = documento;
+  return {
+    document: 'Configuración mensual',
+    linkRoute: `${SOLICITUD_ROUTE}/${documento.numero}`,
+    number: documento.numero,
+    actionType: 'Modificación',
+    status: estado,
+    system: 'Contabilidad',
+    date: documento.fecha,
+    entity: documento.entidad,
+    creator: documento.creador,
+    subject: `Modificación de la fecha de cierre ${configuracion.tipoCierre.toLowerCase()} de ${documento.nombreEntidad}`,
+  };
 }
 
 export const APERTURA_CONTABLE_MENSUAL_DOCUMENTS_CONFIG: DocumentsRecordsConfig = {

@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { CurrentUserService } from '../../../../core/auth/current-user.service';
 import { TokenService } from '../../../../core/auth/token.service';
 import { buscarUsuarioPorPerfil } from '../../../../mock/usuarios-demo';
+import { DocumentoAperturaService } from './documento-apertura.service';
 import {
   CLAVE_CONFIGURACIONES_APERTURA,
   ConfiguracionPliego,
@@ -13,6 +14,8 @@ import {
 
 /** Lo que el usuario grabó al editar la apertura contable mensual de un pliego. */
 export interface EdicionPliego {
+  /** Pliego o unidad ejecutora que se editó (su nombre). */
+  entidadNombre: string;
   periodo: SituacionPeriodoPliego;
   tipoCierre: ConfiguracionPliego['tipoCierre'];
   fechaInicio: string;
@@ -43,6 +46,7 @@ type ConfiguracionesPorAmbito = Partial<Record<Ambito, Record<string, Configurac
 export class ConfiguracionPliegoService {
   private readonly token = inject(TokenService);
   private readonly usuario = inject(CurrentUserService);
+  private readonly documentos = inject(DocumentoAperturaService);
 
   /** `clave` es el pliego o, para la UE, `unidad|periodo`; `periodo` da las fechas del ejemplo si nunca se editó. */
   obtener(clave: string, periodo?: SituacionPeriodoPliego): ConfiguracionPliego {
@@ -79,6 +83,28 @@ export class ConfiguracionPliegoService {
     } catch {
       // Sin almacenamiento: el detalle vuelve a mostrar el ejemplo.
     }
+
+    this.generarDocumento(edicion, nueva);
+  }
+
+  /** Cada edición grabada llega como un documento verificado al aprobador de su ámbito. */
+  private generarDocumento(edicion: EdicionPliego, configuracion: ConfiguracionPliego): void {
+    const ambito = this.ambito();
+    const { historial: _historial, ...datos } = configuracion;
+    const entidad = {
+      DGCP: '009 - Ministerio de Economía Finanzas',
+      PLIEGO: '011 - Ministerio de Salud',
+      UE: `011 - ${this.usuario.user().ue ?? 'Unidad ejecutora'}`,
+    }[ambito];
+
+    this.documentos.crear({
+      ambito,
+      entidad,
+      etiquetaEntidad: ambito === 'DGCP' ? 'Pliego' : 'Unidad ejecutora',
+      nombreEntidad: edicion.entidadNombre,
+      creador: this.usuarioActual(),
+      configuracion: datos,
+    });
   }
 
   private ambito(): Ambito {

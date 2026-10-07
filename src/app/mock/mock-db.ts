@@ -8,7 +8,7 @@ import {
   CuentaBancariaRegistro,
   NOMBRE_DOCUMENTO,
 } from '../modules/tesoreria/cuentas-bancarias/models/cuenta-bancaria.model';
-import { CLAVE_CONFIGURACIONES_APERTURA, CLAVE_DOCUMENTOS_APERTURA } from '../modules/contabilidad/apertura-contable-mensual/models/apertura-contable-mensual.model';
+import { CLAVE_CONFIGURACIONES_APERTURA, CLAVE_DOCUMENTOS_APERTURA, CLAVE_DOCUMENTOS_CREADOS } from '../modules/contabilidad/apertura-contable-mensual/models/apertura-contable-mensual.model';
 import { USUARIOS_DEMO, UsuarioDemo } from './usuarios-demo';
 
 /**
@@ -76,6 +76,7 @@ export function reiniciarDatosDemo(): void {
   try {
     localStorage.removeItem(CLAVE_CONFIGURACIONES_APERTURA);
     localStorage.removeItem(CLAVE_DOCUMENTOS_APERTURA);
+    localStorage.removeItem(CLAVE_DOCUMENTOS_CREADOS);
   } catch {
     // Sin almacenamiento: no hay nada que borrar.
   }

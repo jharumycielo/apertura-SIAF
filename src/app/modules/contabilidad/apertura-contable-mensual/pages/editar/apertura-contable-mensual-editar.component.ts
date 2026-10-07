@@ -395,6 +395,7 @@ export class AperturaContableMensualEditarComponent {
 
     const archivo = this.sustento();
     this.configuraciones.guardar(this.claveConfiguracion(pliego.id, periodo.periodo), {
+      entidadNombre: pliego.pliego,
       periodo,
       tipoCierre: this.tipoCierre() === 'operativo' ? 'Operativo' : 'Contable',
       fechaInicio: isoToDdmmyyyy(this.fechaInicio()),

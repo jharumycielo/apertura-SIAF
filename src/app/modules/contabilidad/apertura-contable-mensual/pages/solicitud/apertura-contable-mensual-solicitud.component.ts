@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { PermissionService } from '../../../../../core/auth/permission.service';
 import { ESTADO, MOTIVOS_RECHAZO } from '../../../../../core/models/documento.model';
@@ -17,13 +17,9 @@ import { SnackbarVariant } from '../../../../../shared/ui/snackbar/snackbar.comp
 import { SummaryCardComponent, SummaryCardField } from '../../../../../shared/ui/summary-card/summary-card.component';
 import { UploadedFileCardComponent } from '../../../../../shared/ui/uploaded-file-card/uploaded-file-card.component';
 import { DOCUMENTOS_ROUTE } from '../../config/apertura-contable-mensual.rutas';
-import { generarConfiguracionDePliego, nombrePeriodo } from '../../models/apertura-contable-mensual.model';
+import { DocumentoApertura, nombrePeriodo } from '../../models/apertura-contable-mensual.model';
 import { ConfiguracionPliegoService } from '../../services/configuracion-pliego.service';
 import { DocumentoAperturaService } from '../../services/documento-apertura.service';
-
-const NUMERO_DOCUMENTO = '0001';
-const FECHA_REGISTRO = '19/08/2025 08:00:59';
-const RESPONSABLE = 'RICARDO JOHN DOE BUSTAMANTE';
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
@@ -35,8 +31,8 @@ function ahora(): string {
 /**
  * Aprobar una «Configuración mensual» (Figma node-id 2424:243273): se llega al pulsar el nombre del documento en
  * «Documentos y registros». Muestra el documento (fecha, ente rector, entidad, número y estado), la apertura contable
- * mensual de solo lectura, la justificación con su sustento y el seguimiento. El aprobador puede aprobar, observar o
- * rechazar; en el taller no hay backend para este documento, así que su estado queda en el navegador.
+ * mensual de solo lectura, la justificación con su sustento y el seguimiento. El aprobador puede aprobar o rechazar
+ * (observar está deshabilitado); en el taller no hay backend para este documento, así que su estado queda en el navegador.
  */
 @Component({
   selector: 'siaf-apertura-contable-mensual-solicitud',
@@ -61,9 +57,9 @@ function ahora(): string {
         heading="Configuración mensual"
         secondaryText="Modificación"
         [showReturn]="true"
+        [observeDisabled]="true"
         (returned)="volver()"
         (approved)="abrirAprobar()"
-        (observed)="abrirObservar()"
         (rejected)="abrirRechazar()"
       >
         <section class="grid gap-siaf-md lg:grid-cols-[1fr_360px]">
@@ -73,7 +69,7 @@ function ahora(): string {
 
         <siaf-solicitude-form-card title="Apertura contable mensual">
           <section class="flex flex-col gap-siaf-sm" aria-labelledby="solicitud-pliego">
-            <h3 id="solicitud-pliego" class="m-0 text-sm font-bold uppercase text-text">Pliego</h3>
+            <h3 id="solicitud-pliego" class="m-0 text-sm font-bold uppercase text-text">{{ documento.etiquetaEntidad }}</h3>
             <siaf-summary-card [bordered]="true" [showClose]="false" [fields]="camposPliego" />
           </section>
 
@@ -112,7 +108,6 @@ function ahora(): string {
 
       <siaf-request-approval-modals
         [approveOpen]="modalAprobar()"
-        [observeOpen]="modalObservar()"
         [rejectOpen]="modalRechazar()"
         [reason]="comentario()"
         [rejectReasonType]="motivoRechazo()"
@@ -122,7 +117,6 @@ function ahora(): string {
         requestType="modificación"
         [requestNumber]="numero"
         (approveConfirmed)="resolver('approve')"
-        (observeConfirmed)="resolver('observe')"
         (rejectConfirmed)="resolver('reject')"
         (approvalClosed)="cerrarModales()"
         (reasonChange)="comentario.set($event)"
@@ -135,11 +129,12 @@ function ahora(): string {
 })
 export class AperturaContableMensualSolicitudComponent {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly permissions = inject(PermissionService);
   private readonly documentos = inject(DocumentoAperturaService);
   private readonly configuraciones = inject(ConfiguracionPliegoService);
 
-  readonly numero = NUMERO_DOCUMENTO;
+  readonly numero = this.route.snapshot.paramMap.get('numero') ?? '';
   readonly breadcrumbs: BreadcrumbItem[] = [
     { label: 'Inicio', href: '/panel' },
     { label: 'Apertura contable', href: '/panel' },
@@ -148,22 +143,28 @@ export class AperturaContableMensualSolicitudComponent {
     { label: 'Configuración mensual' },
   ];
 
-  readonly configuracion = generarConfiguracionDePliego();
+  /** El documento sale del registro; si el número no existe vuelve a la lista. */
+  readonly documento: DocumentoApertura = this.documentos.obtenerDocumento(this.numero) ?? this.volverALista();
+  readonly configuracion = this.documento.configuracion;
   readonly camposDocumento: SolicitudeInfoField[] = [
-    { label: 'Fecha', value: FECHA_REGISTRO },
+    { label: 'Fecha', value: this.documento.fechaHora },
     { label: 'Ente rector', value: 'DIRECCIÓN GENERAL DE CONTABILIDAD PÚBLICA' },
-    { label: 'Entidad', value: '009 - MINISTERIO DE ECONOMÍA FINANZAS' },
+    { label: 'Entidad', value: this.documento.entidad.toUpperCase() },
   ];
-  readonly camposPliego: SummaryCardField[] = [{ label: 'Nombre del pliego', value: 'MINISTERIO DE SALUD' }];
-  readonly camposPeriodo: SummaryCardField[] = [{ label: 'Periodo mensual', value: nombrePeriodo(this.configuracion.periodo) }];
+  readonly camposPliego: SummaryCardField[] = [
+    { label: this.documento.etiquetaEntidad === 'Pliego' ? 'Nombre del pliego' : 'Nombre de la unidad ejecutora', value: this.documento.nombreEntidad },
+  ];
+  /** Los documentos de un pliego nombran el mes («ENERO - 2026»); los de una unidad ejecutora, no («2026 - 01»). */
+  readonly camposPeriodo: SummaryCardField[] = [
+    { label: 'Periodo mensual', value: this.documento.etiquetaEntidad === 'Pliego' ? nombrePeriodo(this.configuracion.periodo) : this.configuracion.periodo },
+  ];
 
-  readonly seguimiento = signal(this.documentos.obtener(NUMERO_DOCUMENTO));
+  readonly seguimiento = signal(this.documentos.obtener(this.numero));
   readonly estadoDocumento = computed(() => this.seguimiento().estado as FlowStatus);
   readonly headerRole = computed<'creator' | 'approver'>(() => (this.permissions.currentRole() === 'approver' ? 'approver' : 'creator'));
   readonly headerState = computed<SolicitudeHeaderState>(() => {
     switch (this.seguimiento().estado) {
       case ESTADO.APROBADO: return 'approved';
-      case ESTADO.OBSERVADO: return 'observed';
       case ESTADO.RECHAZADO: return 'rejected';
       default: return 'verified';
     }
@@ -171,10 +172,10 @@ export class AperturaContableMensualSolicitudComponent {
 
   readonly trazabilidad = computed<ActionTrackerSummary[]>(() => {
     const { estado, resueltoPor } = this.seguimiento();
-    const etiqueta = estado === ESTADO.OBSERVADO ? 'Observado por' : estado === ESTADO.RECHAZADO ? 'Rechazado por' : 'Aprobado por';
+    const etiqueta = estado === ESTADO.RECHAZADO ? 'Rechazado por' : 'Aprobado por';
     return [
-      { label: 'Elaborado por', actionBy: RESPONSABLE, date: FECHA_REGISTRO },
-      { label: 'Verificado por', actionBy: RESPONSABLE, date: FECHA_REGISTRO },
+      { label: 'Elaborado por', actionBy: this.documento.creador, date: this.documento.fechaHora },
+      { label: 'Verificado por', actionBy: this.documento.creador, date: this.documento.fechaHora },
       {
         label: etiqueta,
         actionBy: resueltoPor?.usuario ?? 'No asignado aún',
@@ -184,7 +185,6 @@ export class AperturaContableMensualSolicitudComponent {
   });
 
   readonly modalAprobar = signal(false);
-  readonly modalObservar = signal(false);
   readonly modalRechazar = signal(false);
   readonly comentario = signal('');
   readonly motivoRechazo = signal('');
@@ -197,11 +197,6 @@ export class AperturaContableMensualSolicitudComponent {
     this.modalAprobar.set(true);
   }
 
-  abrirObservar(): void {
-    this.comentario.set('');
-    this.modalObservar.set(true);
-  }
-
   abrirRechazar(): void {
     this.comentario.set('');
     this.motivoRechazo.set('');
@@ -210,28 +205,32 @@ export class AperturaContableMensualSolicitudComponent {
 
   cerrarModales(): void {
     this.modalAprobar.set(false);
-    this.modalObservar.set(false);
     this.modalRechazar.set(false);
   }
 
-  /** Aprobar, observar o rechazar: observar y rechazar piden el comentario. Guarda el estado y avisa. */
-  resolver(accion: 'approve' | 'observe' | 'reject'): void {
-    if (accion !== 'approve' && !this.comentario().trim()) return;
+  /** Aprobar o rechazar (observar está deshabilitado en este proceso): rechazar pide el comentario. Guarda el estado y avisa. */
+  resolver(accion: 'approve' | 'reject'): void {
+    if (accion === 'reject' && !this.comentario().trim()) return;
     this.cerrarModales();
 
-    const estado = { approve: ESTADO.APROBADO, observe: ESTADO.OBSERVADO, reject: ESTADO.RECHAZADO }[accion];
+    const estado = { approve: ESTADO.APROBADO, reject: ESTADO.RECHAZADO }[accion];
     const nuevo = {
       estado,
       resueltoPor: { usuario: this.configuraciones.usuarioActual(), fecha: ahora() },
       comentario: accion === 'approve' ? undefined : this.comentario().trim(),
     };
-    this.documentos.guardar(NUMERO_DOCUMENTO, nuevo);
+    this.documentos.guardar(this.numero, nuevo);
     this.seguimiento.set(nuevo);
-    this.aviso.set({ approve: 'modification-approved', observe: 'modification-observed', reject: 'modification-rejected' }[accion] as SnackbarVariant);
+    this.aviso.set({ approve: 'modification-approved', reject: 'modification-rejected' }[accion] as SnackbarVariant);
     this.avisoAbierto.set(true);
   }
 
   volver(): void {
     void this.router.navigate([DOCUMENTOS_ROUTE]);
+  }
+
+  private volverALista(): never {
+    void this.router.navigate([DOCUMENTOS_ROUTE]);
+    throw new Error(`El documento ${this.numero} de apertura contable mensual no existe.`);
   }
 }
