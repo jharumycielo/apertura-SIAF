@@ -16,7 +16,7 @@ import { SidebarComponent, SidebarNavigation } from '../sidebar/sidebar.componen
 import { CurrentUserService } from '../../core/auth/current-user.service';
 import { PermissionService } from '../../core/auth/permission.service';
 import { ShellNavigationService } from './shell-navigation.service';
-import { ADMIN_MENU_TREE } from '../../shared/utils/process-tree.util';
+import { ADMIN_MENU_TREE, DEFAULT_PROCESS_TREE, filtrarArbolPorRol } from '../../shared/utils/process-tree.util';
 
 /**
  * Armazón de la app autenticada: navbar, sidebar y los paneles flotantes sobre los que vive el router-outlet.
@@ -68,7 +68,7 @@ import { ADMIN_MENU_TREE } from '../../shared/utils/process-tree.util';
 
       @if (processMenuOpen) {
         <div class="fixed inset-x-0 bottom-0 top-14 z-20 lg:left-16 lg:right-auto" (click)="$event.stopPropagation()">
-          <siaf-process-menu-tree (nodeSelected)="onProcessNodeSelected($event)" />
+          <siaf-process-menu-tree [nodes]="procesosDelRol()" (nodeSelected)="onProcessNodeSelected($event)" />
         </div>
       }
 
@@ -346,6 +346,9 @@ export class AppShellComponent implements OnInit {
       this.activeNavigation = 'Proceso';
     }
   }
+
+  /** Árbol del menú «Procesos» según el rol con sesión (el aprobador no ve la configuración de apertura mensual). */
+  readonly procesosDelRol = computed(() => filtrarArbolPorRol(DEFAULT_PROCESS_TREE, this.permissionService.currentRole()));
 
   /** Árbol del menú "Ajustes": lo pinta el mismo `siaf-process-menu-tree` que el de procesos. */
   readonly adminMenuTree = ADMIN_MENU_TREE;

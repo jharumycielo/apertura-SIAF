@@ -28,6 +28,8 @@ export interface ProcessMenuNode {
    * y el click no navega (solo expande si tiene hijos).
    */
   comingSoon?: boolean;
+  /** Si se indica, solo estos roles ven el nodo en el menú (sin indicar, lo ven todos). */
+  roles?: readonly string[];
   children?: ProcessMenuNode[];
 }
 
@@ -82,17 +84,26 @@ export const DEFAULT_PROCESS_TREE: ProcessMenuNode[] = [
         comingSoon: true,
         children: [
           { id: 'consulta-apertura-contable-anual', label: 'Consulta de Apertura Contable Anual', comingSoon: true },
-          { id: 'apertura-contable-mensual', label: 'Apertura contable mensual', comingSoon: true },
+          { id: 'apertura-contable-mensual', label: 'Apertura contable mensual', moduleRoute: '/procesos/apertura-contable-mensual' },
           {
             id: 'configuracion-apertura-contable-mensual',
             label: 'Configuración de apertura contable mensual',
             moduleRoute: '/procesos/apertura-contable-mensual/configuracion',
+            roles: ['creator'],
           },
         ],
       },
     ],
   },
 ];
+
+/** El árbol que ve un rol: quita los nodos que no le corresponden (y los agrupadores que quedan sin hijos). */
+export function filtrarArbolPorRol(nodes: readonly ProcessMenuNode[], rol: string): ProcessMenuNode[] {
+  return nodes
+    .filter((nodo) => !nodo.roles || nodo.roles.includes(rol))
+    .map((nodo) => (nodo.children ? { ...nodo, children: filtrarArbolPorRol(nodo.children, rol) } : nodo))
+    .filter((nodo) => !nodo.children || nodo.children.length > 0);
+}
 
 export function findProcessPathById(id: string, nodes: readonly ProcessMenuNode[] = DEFAULT_PROCESS_TREE): ProcessMenuNode[] {
   for (const node of nodes) {
