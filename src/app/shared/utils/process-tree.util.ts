@@ -83,7 +83,6 @@ export const DEFAULT_PROCESS_TREE: ProcessMenuNode[] = [
         label: 'Apertura contable',
         comingSoon: true,
         children: [
-          { id: 'consulta-apertura-contable-anual', label: 'Consulta de Apertura Contable Anual', comingSoon: true },
           { id: 'apertura-contable-mensual', label: 'Apertura contable mensual', moduleRoute: '/procesos/apertura-contable-mensual' },
           {
             id: 'configuracion-apertura-contable-mensual',

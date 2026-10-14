@@ -7,11 +7,15 @@ describe('process-tree.util · filtrarArbolPorRol', () => {
     expect(ids(filtrarArbolPorRol(DEFAULT_PROCESS_TREE, 'creator'))).toContain('configuracion-apertura-contable-mensual');
   });
 
-  it('el aprobador no la ve, pero sí el resto de «Apertura contable»', () => {
+  it('ningún rol ve la consulta de apertura contable anual', () => {
+    expect(ids(filtrarArbolPorRol(DEFAULT_PROCESS_TREE, 'creator'))).not.toContain('consulta-apertura-contable-anual');
+    expect(ids(filtrarArbolPorRol(DEFAULT_PROCESS_TREE, 'approver'))).not.toContain('consulta-apertura-contable-anual');
+  });
+
+  it('el aprobador no ve la configuración, pero sí «Apertura contable mensual»', () => {
     const visibles = ids(filtrarArbolPorRol(DEFAULT_PROCESS_TREE, 'approver'));
 
     expect(visibles).not.toContain('configuracion-apertura-contable-mensual');
-    expect(visibles).toContain('consulta-apertura-contable-anual');
     expect(visibles).toContain('apertura-contable-mensual');
   });
 
